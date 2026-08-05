@@ -31,7 +31,7 @@ import {
   type BinaryAgentSpec,
   type BuiltinAgentSpec,
 } from "./catalog.js";
-import { spawnCommand } from "./spawn.js";
+import { killTree, spawnCommand } from "./spawn.js";
 
 /** Long enough that a re-probe is cheap, short enough to notice an install. */
 const CACHE_MS = 60_000;
@@ -98,7 +98,9 @@ async function probeVersion(command: string, args: string[]): Promise<string | n
       let out = "";
 
       const timer = setTimeout(() => {
-        child.kill();
+        // The tree, not the process: `claude --version` may be a shim, and a
+        // probe is not worth leaving a stray process behind for.
+        killTree(child);
         finish(null);
       }, 3000);
 

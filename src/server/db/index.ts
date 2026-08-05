@@ -10,6 +10,10 @@
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 
+// Held at 12.x deliberately. The 13.x line's `linux-x64` prebuild segfaults the
+// moment a database is opened — `new Database(":memory:")` alone is enough —
+// which on CI takes down every test worker that touches the store. Worth
+// re-checking when 13 next publishes, but not worth an unprompted bump.
 import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 

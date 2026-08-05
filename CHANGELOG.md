@@ -16,6 +16,18 @@ understanding that before `1.0.0`, `0.x` releases can include breaking changes.
 
 ## [Unreleased]
 
+### Fixed
+
+- **A timed-out `run_command` no longer hangs the turn on macOS and Linux.**
+  The kill reached only the shell ModelDock spawned, never the command that
+  shell went on to start — and because the grandchild still held the output
+  pipes, the tool waited out the command's full runtime anyway. Children are
+  now started in their own process group and the group is what gets signalled,
+  which is what Windows had all along via `taskkill /t`. A Ctrl-C in the
+  terminal running ModelDock still reaches a running build.
+- **`better-sqlite3` held at 12.x.** The 13.x `linux-x64` prebuild segfaults on
+  opening a database, which made the store unusable on Linux.
+
 ## [0.1.0] - 2026-08-04
 
 The first alpha. Chat, memory and projects live in one SQLite file; the
