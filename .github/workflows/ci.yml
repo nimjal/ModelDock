@@ -1,0 +1,86 @@
+# Typecheck, test and build on every push and pull request.
+#
+# Windows is in the matrix on purpose rather than as a courtesy: the directory
+# boundary and the agent-spawning path both have real Windows-specific
+# behaviour — 8.3 short paths, PATHEXT resolution, and `.cmd` shims that have to
+# go through cmd.exe — and all three have already been the source of bugs that
+# a Linux-only run would not have caught.
+#
+# No coding agent is installed here. The agent tests drive a fake CLI fixture
+# over the real subprocess path, so they pass on a bare runner.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Nothing in this workflow needs to write anything back to the repo or to
+# GitHub — it only reads the checked-out code — so the default token gets no
+# permissions beyond that.
+permissions:
+  contents: read
+
+# A branch pushed to twice in quick succession would otherwise queue a second
+# full matrix behind the first. Cancel the stale run instead of waiting on
+# results nobody will read.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ${{ matrix.os }}
+    # Guards against a hung process (e.g. a server that starts and never
+    # exits) tying up a runner indefinitely.
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        # 20 and 22 are LTS; 24 is the current line and next up for LTS.
+        # `engines` in package.json says >=20, so all three are in scope.
+        node: ["20", "22", "24"]
+
+    name: ${{ matrix.os }} · node ${{ matrix.node }}
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      # `npm ci` needs the lockfile to be in step with package.json, which is
+      # also worth failing on.
+      - run: npm ci
+
+      - run: npm run lint
+
+      - run: npm run typecheck
+
+      - run: npm test
+
+      - run: npm run build
+
+      # Coverage is informational, not a merge gate, so it only needs to run
+      # once rather than on every cell of the matrix. Ubuntu + Node 22 is the
+      # "primary" cell: current LTS, on the platform most contributors and CI
+      # infra actually run day to day.
+      #
+      # continue-on-error because a number nobody is gating on should never be
+      # the reason a correct change goes red.
+      - name: Coverage (ubuntu, node 22 only)
+        if: matrix.os == 'ubuntu-latest' && matrix.node == '22'
+        continue-on-error: true
+        run: npm run coverage
+
+      - name: Upload coverage report
+        if: matrix.os == 'ubuntu-latest' && matrix.node == '22'
+        continue-on-error: true
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: coverage
+          path: coverage/

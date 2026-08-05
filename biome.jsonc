@@ -1,0 +1,88 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.7/schema.json",
+  "files": {
+    "includes": [
+      "**",
+      "!**/dist",
+      "!**/coverage",
+      "!**/drizzle",
+      "!**/node_modules",
+      "!**/package-lock.json"
+    ]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 100
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended",
+      "a11y": {
+        // Every icon in this app already carries `aria-hidden`, which is the
+        // correct treatment for a decorative svg; the rule wants a <title>
+        // regardless and would have us describe arrows.
+        "noSvgWithoutTitle": "off",
+        // Autofocus is deliberate and confined to the command palette and
+        // inline rename fields — surfaces opened by a keystroke, where *not*
+        // taking focus would be the accessibility problem.
+        "noAutofocus": "off"
+      },
+      "complexity": {
+        // The only `!important` in the codebase is inside a
+        // prefers-reduced-motion block, where overriding animation is the
+        // whole point and the canonical idiom.
+        "noImportantStyles": "off"
+      },
+      "correctness": {
+        // Several effects deliberately leave a value out of their dependencies
+        // and read it through a ref instead, so that changing it does not tear
+        // down and rebuild a live transport mid-conversation. Putting the
+        // dependency back would be a behaviour change, not a fix.
+        "useExhaustiveDependencies": "off",
+        "noUnusedVariables": "error",
+        "noUnusedImports": "error"
+      },
+      "style": {
+        // `noUncheckedIndexedAccess` is on in tsconfig, so indexing is
+        // correctly typed as possibly-undefined and `!` at a checked access is
+        // what makes that bearable rather than a claim of infallibility.
+        "noNonNullAssertion": "off",
+        // The prompt builders assemble multi-line strings by concatenation,
+        // which reads better than nesting template literals.
+        "useTemplate": "off",
+        "useImportType": "error"
+      },
+      "suspicious": {
+        "noExplicitAny": "error"
+      }
+    }
+  },
+  "css": {
+    "parser": {
+      // Tailwind v4 configures itself in CSS — `@theme`, `@apply` — so the
+      // stylesheets are not plain CSS and the parser has to be told.
+      "tailwindDirectives": true
+    }
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "double",
+      "semicolons": "always",
+      "trailingCommas": "all",
+      "arrowParentheses": "always"
+    }
+  },
+  "assist": {
+    "enabled": true,
+    "actions": {
+      "source": {
+        // The import order here is grouped by origin — node builtins, then
+        // packages, then local — which a sorter would flatten.
+        "organizeImports": "off"
+      }
+    }
+  }
+}

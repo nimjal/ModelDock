@@ -1,0 +1,51 @@
+# Publish to npm when a version tag is pushed.
+#
+# There is no npm token anywhere in this workflow, and that is the point.
+# Publishing uses OIDC trusted publishing: GitHub mints a short-lived identity
+# token for this specific workflow, npm verifies it, and the package is
+# published with a provenance attestation tying the tarball to this repository
+# and this commit. A long-lived `NPM_TOKEN` secret is the thing most commonly
+# stolen from a compromised CI, so the safest version of it is not having one.
+#
+# The build runs here, immediately before publishing, rather than being trusted
+# from anywhere else: `files: ["dist"]` in package.json means whatever `dist/`
+# happens to exist at publish time is exactly what ships. On a clean checkout
+# that is nothing at all.
+
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+  # Required for OIDC. This is the only elevated permission in the repo, and it
+  # buys the absence of a stored credential.
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+          cache: npm
+          # Needed for the auth handshake even though no token is stored.
+          registry-url: "https://registry.npmjs.org"
+
+      - run: npm ci
+
+      # A tag is not a licence to skip the checks. Everything CI runs on a pull
+      # request runs again here, because this is the artifact people install.
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
+      - run: npm publish --provenance --access public

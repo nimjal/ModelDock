@@ -1,0 +1,43 @@
+name: Feature request
+description: Suggest something ModelDock should be able to do.
+labels: ["enhancement"]
+
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: >
+        What you were trying to do, and where it stopped. Describe the situation
+        rather than the feature — the best version of a change is often not the
+        one first imagined, and that only surfaces if the problem is on the table.
+    validations:
+      required: true
+
+  - type: textarea
+    id: shape
+    attributes:
+      label: What a solution might look like
+      description: Optional. A sketch is fine; it does not have to be the answer.
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What you tried or considered instead
+      description: >
+        Including anything that nearly worked. A workaround that is only slightly
+        wrong tells us more about the shape of the problem than a blank page does.
+
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope
+      description: >
+        ModelDock is deliberately thin on compute and thick on state: it borrows
+        inference and agentic coding, and owns conversations, projects and
+        memory. Requests that put state somewhere ModelDock does not own, or
+        that turn it into an inference provider or bundle a coding-agent binary,
+        are usually the wrong shape for this project however good the idea is.
+      options:
+        - label: I have read the README's scope, and this fits it as far as I can tell.
+          required: true

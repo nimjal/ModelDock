@@ -1,0 +1,32 @@
+# Keep dependencies and workflow actions current.
+#
+# Minor and patch updates are grouped into one pull request per ecosystem.
+# Ungrouped, a project this size produces a steady trickle of individually
+# uninteresting PRs, and the reliable outcome of that is that they stop being
+# read — which is worse than updating a little less often. Majors stay separate
+# because they are the ones that need a person.
+#
+# The actions ecosystem matters more than it looks: this repository pins every
+# action to a commit SHA, so without Dependabot those pins would silently rot
+# and never pick up a security fix.
+
+version: 2
+
+updates:
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        update-types: ["minor", "patch"]
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
+    groups:
+      actions:
+        update-types: ["minor", "patch"]

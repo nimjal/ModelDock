@@ -1,0 +1,30 @@
+# Build output and dependencies
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+
+# Drizzle Kit writes here. Nothing at runtime reads it — the schema is stated
+# as SQL in src/server/db/migrate.ts so a published single file can migrate
+# itself — so this is a scratch directory, not source.
+drizzle/
+
+# A store. The app writes ~/.modeldock/modeldock.db, but a stray one in the
+# checkout must never be committed: it is somebody's conversations.
+*.db
+*.db-shm
+*.db-wal
+
+# Secrets. `.env.example` is the documented template and is meant to be here.
+.env
+.env.*
+!.env.example
+
+# Local and editor
+*.local
+*.log
+npm-debug.log*
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
