@@ -1,12 +1,18 @@
-# Publish to npm on a version tag.
+# Stage a release to npm on a version tag. Approving it is a separate,
+# deliberate act by a person — see the last step.
 #
 # There is no npm token in this repository and there is not meant to be one.
 # Authentication is npm trusted publishing: the runner mints a short-lived
 # GitHub OIDC token, npm exchanges it for a credential good for this one
-# publish, and nothing long-lived exists to leak, rotate or forget. The npm
+# operation, and nothing long-lived exists to leak, rotate or forget. The npm
 # side of that handshake is configured on the package itself, at
 # https://www.npmjs.com/package/modeldock/access, and every field there is
 # matched exactly — repository, workflow filename, environment.
+#
+# That configuration deliberately grants `npm stage publish` alone. Automation
+# that can publish is automation that can be made to publish, and the whole
+# point of removing the token was to stop anything in CI from being able to
+# ship on its own. What remains here is a build, not a release.
 #
 # When the handshake does not happen, npm does not say so. It reports
 # ENEEDAUTH or a 404 on a package that plainly exists, both of which point at
@@ -133,16 +139,42 @@ jobs:
             echo "::error::tag $GITHUB_REF_NAME does not match package.json version $pkg"
             exit 1
           fi
-          echo "publishing $pkg"
+          echo "staging $pkg"
 
       - run: npm ci
       - run: npm test
 
+      # Staged, not published. This job cannot put a live package on the
+      # registry: the trusted publisher for `modeldock` grants
+      # `npm stage publish` and not `npm publish`, so the most this workflow
+      # can do — with a stolen tag, a compromised branch, or a hostile
+      # dependency running during the build — is queue a tarball that a human
+      # then declines. Going live needs `npm stage approve` and a second
+      # factor, which lives on a phone rather than in this repository.
+      #
       # `publishConfig.access` in package.json covers --access. `--provenance`
       # is in principle redundant — the documentation says an OIDC publish
-      # attaches an attestation on its own — but it is also the flag that
-      # states the intent to use OIDC, and there are enough reports of the
-      # exchange not being attempted without it that asking explicitly costs
-      # nothing and removes a variable. `prepack` builds dist/, which is
-      # gitignored and therefore has to be built here.
-      - run: npm publish --provenance
+      # attaches an attestation on its own — but it also states the intent to
+      # use OIDC, and asking explicitly costs nothing. `prepack` builds dist/,
+      # which is gitignored and therefore has to be built here; if it ever
+      # failed to, the staged tarball is inspectable before approval rather
+      # than a bad release someone has to unpublish.
+      - run: npm stage publish --provenance
+
+      # A release now needs a second, manual step, and it will be weeks
+      # between releases. Put the instructions on the run page itself rather
+      # than making someone go and look them up.
+      - name: How to approve this release
+        run: |
+          {
+            echo "### Staged — nothing is live yet"
+            echo
+            echo '```'
+            echo "npm stage list modeldock      # find the stage id"
+            echo "npm stage view <stage-id>     # inspect exactly what CI built"
+            echo "npm stage approve <stage-id>  # 2FA, then it goes live"
+            echo "npm stage reject <stage-id>   # 2FA, discards it permanently"
+            echo '```'
+            echo
+            echo "Or the **Staged Packages** tab on npmjs.com."
+          } >> "$GITHUB_STEP_SUMMARY"
