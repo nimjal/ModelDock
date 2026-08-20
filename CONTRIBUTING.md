@@ -39,6 +39,17 @@ npm run format       # Biome
 ```
 
 ```bash
+npm run verify      # everything CI runs, in the order CI runs it
+```
+
+`verify` exists so that a green local run means a green pull request. It is
+the same four commands as CI, preceded by `npm ci --dry-run` — a check that
+`package.json` and `package-lock.json` still agree. That one is there because
+lockfile drift is the most common way a branch that passes locally goes red in
+CI: `npm install` is happy to leave the two out of step, and `npm ci`, which is
+CI's first step, refuses to.
+
+```bash
 npm run build        # bundles to dist/
 node dist/cli.js      # run what you just built
 ```
@@ -192,9 +203,9 @@ cosmetic bug.
 - New or changed behaviour needs a test.
 - Add a `CHANGELOG.md` entry under `[Unreleased]`.
 - Fill out the checklist in `.github/pull_request_template.md` honestly.
-  It asks for `npm test` and `npm run typecheck` to pass locally, and it
-  asks whether you touched one of the three security-critical files above
-  — that's not decoration, it's how a reviewer knows where to look first.
+  It asks for `npm run verify` to pass locally, and it asks whether you
+  touched one of the three security-critical files above — that's not
+  decoration, it's how a reviewer knows where to look first.
 
 ## AI-assisted contributions
 

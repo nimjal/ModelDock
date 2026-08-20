@@ -4,8 +4,7 @@
 
 ## Checklist
 
-- [ ] `npm test` passes locally
-- [ ] `npm run typecheck` is clean
+- [ ] `npm run verify` passes locally (lockfile, lint, typecheck, tests, build — the same checks CI runs)
 - [ ] I can explain every line if asked
 - [ ] This diff is the smallest version of the fix/feature that's correct
 - [ ] Nothing here was added "just in case" (no speculative abstraction, no unrelated cleanup)

@@ -1,26 +1,93 @@
+# Publish to npm on a version tag.
+#
+# There is no npm token in this repository and there is not meant to be one.
+# Authentication is npm trusted publishing: the runner mints a short-lived
+# GitHub OIDC token, npm exchanges it for a credential good for this one
+# publish, and nothing long-lived exists to leak, rotate or forget. The npm
+# side of that handshake is configured on the package at npmjs.com and must
+# name this repository, this workflow filename, and this environment.
+#
+# The exchange is fragile in exactly one way — see the note on `registry-url`.
+
 name: Release
 
 on:
   push:
     tags: ['v*']
 
+# `id-token: write` is what lets the runner mint the OIDC token; without it npm
+# has nothing to exchange and goes looking for a token that does not exist.
+# `contents: read` is all the rest of the job does — it never writes back.
 permissions:
   id-token: write
   contents: read
 
+# Two publishes of the same version cannot both win, and a re-run racing the
+# original is a confusing way to find that out. Queue instead of cancelling:
+# a publish that is already talking to the registry should be left alone.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 jobs:
   publish:
     runs-on: ubuntu-latest
+    # Must line up with the trusted publisher configured for `modeldock` on
+    # npmjs.com: same repository, same workflow filename (release.yml), and
+    # either this same environment name or none set there at all. A mismatch
+    # is reported by the registry as a 404, which reads like the package does
+    # not exist rather than like a configuration problem.
     environment: release
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # This job never pushes. Leaving the token behind in .git/config
+          # would hand it to every dependency lifecycle script that runs
+          # afterwards, for no benefit.
+          persist-credentials: false
 
-      - uses: actions/setup-node@v6
+      # Deliberately no `registry-url:` here. Setting it makes setup-node write
+      #
+      #   //registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}
+      #
+      # into ~/.npmrc, and with no NODE_AUTH_TOKEN set — which is the entire
+      # point of trusted publishing — that expands to an empty token. npm reads
+      # the line as "auth is already configured", skips the OIDC exchange
+      # altogether and PUTs unauthenticated, which the registry answers with a
+      # baffling E404 on a package that plainly exists. Left out, npm defaults
+      # to registry.npmjs.org anyway and takes the OIDC path.
+      # https://github.com/npm/documentation/issues/1960
+      #
+      # Node 24 is also the floor for a reason unrelated to the code: OIDC
+      # publishing needs npm >= 11.5.1, and only the 24 line bundles it
+      # (24.19 ships 11.17). The 22 line is still on npm 10 and cannot publish
+      # this way at all.
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '24'
-          registry-url: 'https://registry.npmjs.org'
           package-manager-cache: false
+
+      # A tag that disagrees with package.json means one of the two is wrong,
+      # and the expensive way to discover that is a published 0.1.1 sitting
+      # under a v0.2.0 tag — immutable, and confusing for everyone who reads
+      # it later. Runs before anything is installed so the mismatch costs
+      # seconds rather than a full install and test run.
+      - name: Tag matches package.json
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          pkg="$(node -p "require('./package.json').version")"
+          if [ "$tag" != "$pkg" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match package.json version $pkg"
+            exit 1
+          fi
+          echo "publishing $pkg"
 
       - run: npm ci
       - run: npm test
+
+      # No flags needed: `publishConfig.access` in package.json covers --access,
+      # and publishing over OIDC attaches a provenance attestation on its own —
+      # `--provenance` would be asking for what is already happening. `prepack`
+      # builds dist/, which is gitignored and therefore has to be built here.
       - run: npm publish

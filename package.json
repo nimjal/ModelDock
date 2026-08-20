@@ -47,6 +47,7 @@
     "build:web": "vite build",
     "build:server": "tsx scripts/build-server.ts",
     "start": "node dist/cli.js",
+    "verify": "npm ci --dry-run && npm run lint && npm run typecheck && npm test && npm run build",
     "test": "vitest run",
     "test:watch": "vitest",
     "coverage": "vitest run --coverage",
@@ -54,7 +55,6 @@
     "lint": "biome check .",
     "format": "biome check --write .",
     "db:generate": "drizzle-kit generate",
-    "prepublishOnly": "npm run build",
     "prepack": "npm run build"
   },
   "dependencies": {
