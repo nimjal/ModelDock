@@ -69,13 +69,26 @@ describe("upgrading an existing database", () => {
     );
   });
 
+  /**
+   * The only test here whose cost grows with the project. It builds a database
+   * at every historical version and migrates each one the whole way, so adding
+   * a migration adds both another database and another step to every earlier
+   * one. Twelve file opens today; more with every schema change.
+   *
+   * Hence a timeout of its own rather than the suite default. This is the test
+   * that first ran out of budget on a CI runner — at 7.5s against 5s — and the
+   * number here is chosen to stay true for a good many more migrations rather
+   * than to sit just above today's measurement.
+   */
   it("upgrades from every intermediate version", () => {
     for (let from = 0; from < MIGRATIONS.length; from++) {
       const db = createDb(at(from));
-      expect(version(db)).toBe(MIGRATIONS.length);
-      expect(columns(db, "changelog")).toContain("seq");
+      // Named so a failure says which starting version broke, rather than
+      // pointing at a loop body that ran six times.
+      expect(version(db), `upgrading from user_version ${from}`).toBe(MIGRATIONS.length);
+      expect(columns(db, "changelog"), `upgrading from user_version ${from}`).toContain("seq");
     }
-  });
+  }, 60_000);
 
   it("is a no-op the second time, so `ADD COLUMN` never runs twice", () => {
     const file = at(1);
