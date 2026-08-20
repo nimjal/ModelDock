@@ -78,22 +78,30 @@ jobs:
           node-version: '24'
           package-manager-cache: false
 
-      # OIDC publishing needs npm >= 11.5.1, and which npm you get is otherwise
-      # decided by whatever Node 24.x happens to be baked into this month's
-      # runner image — `check-latest` defaults to false, so setup-node takes
-      # the cached build rather than the newest one. That is a fine default for
-      # running tests and a poor one for a feature with a version floor, so the
-      # floor is met explicitly instead of assumed.
-      - run: npm install -g npm@latest
-
       # Cheap, and the difference between a five-minute fix and an afternoon.
-      # If npm is >= 11.5.1 and both OIDC variables are present, then this
+      # If npm clears the floor and both OIDC variables are present, then this
       # workflow has done its part and any remaining failure is the trusted
       # publisher configuration on npmjs.com — wrong repository, wrong workflow
       # filename, wrong environment, or never saved. Presence only: the request
       # token is a credential and is never printed.
+      #
+      # The floor is asserted rather than installed. `npm install -g npm@latest`
+      # is the obvious way to guarantee it and the wrong one: latest is now
+      # npm 12, which stopped running dependency install scripts by default, so
+      # better-sqlite3 never gets a native binding and the whole suite dies on
+      # the first query. Upgrading the toolchain to satisfy a version floor
+      # changes far more than the version. If a future runner image ever drops
+      # below the floor, this says so in one line instead of surfacing as
+      # ENEEDAUTH at the publish step.
       - name: Trusted publishing preconditions
         run: |
+          floor=11.5.1
+          have="$(npm --version)"
+          if [ "$(printf '%s\n%s\n' "$floor" "$have" | sort -V | head -n1)" != "$floor" ]; then
+            echo "::error::npm $have is below the $floor that OIDC publishing needs"
+            exit 1
+          fi
+
           # `yes`/`no` only, via :+ — which expands to the replacement or to
           # nothing at all. The token itself must never reach a public log, so
           # no expansion here is allowed to fall back to a variable's value.
@@ -102,7 +110,7 @@ jobs:
           workflow="${GITHUB_WORKFLOW_REF##*/.github/workflows/}"
 
           echo "node             $(node --version)"
-          echo "npm              $(npm --version)   (needs >= 11.5.1)"
+          echo "npm              $have   (floor $floor, and below npm 12 — see the note above)"
           echo "OIDC url set     ${url:-no  <-- id-token: write is not in effect}"
           echo "OIDC token set   ${tok:-no  <-- id-token: write is not in effect}"
           echo
