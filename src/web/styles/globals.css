@@ -1,0 +1,201 @@
+@import "tailwindcss";
+@import "./tokens.css";
+@import "./fonts.css";
+
+/*
+ * Base. Everything below is either a token binding or a rule Tailwind cannot
+ * express cleanly; component styling lives with the components.
+ */
+
+* {
+  border-color: var(--line);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 0.9375rem;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* One visible focus treatment everywhere, and never a bare outline: none. */
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+::selection {
+  background: var(--focus-wash);
+  color: var(--ink);
+}
+
+/* Scrollbars: present, but not part of the composition. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/*
+ * Assistant prose.
+ *
+ * Replies are set in a reading serif at a real measure, because reading is
+ * what people actually do here and a UI sans at 15px makes long answers feel
+ * like log output. Code inside prose drops back to mono at the UI size.
+ */
+.prose-reply {
+  font-family: var(--font-reading);
+  font-size: 1.0625rem;
+  line-height: 1.65;
+  max-width: 68ch;
+}
+
+.prose-reply > * + * {
+  margin-top: 0.85em;
+}
+
+.prose-reply h1,
+.prose-reply h2,
+.prose-reply h3 {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  line-height: 1.3;
+  margin-top: 1.6em;
+}
+.prose-reply h1 {
+  font-size: 1.35em;
+}
+.prose-reply h2 {
+  font-size: 1.2em;
+}
+.prose-reply h3 {
+  font-size: 1.05em;
+}
+
+.prose-reply ul,
+.prose-reply ol {
+  padding-left: 1.4em;
+}
+.prose-reply ul {
+  list-style: disc;
+}
+.prose-reply ol {
+  list-style: decimal;
+}
+.prose-reply li + li {
+  margin-top: 0.3em;
+}
+
+.prose-reply a {
+  color: var(--ink);
+  text-decoration: underline;
+  text-decoration-color: var(--line-strong);
+  text-underline-offset: 2px;
+}
+.prose-reply a:hover {
+  text-decoration-color: var(--focus);
+}
+
+.prose-reply code {
+  font-family: var(--font-mono);
+  font-size: 0.82em;
+  background: var(--wash);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 0.1em 0.32em;
+}
+
+.prose-reply pre {
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  line-height: 1.6;
+  background: var(--wash);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0.85rem 1rem;
+  overflow-x: auto;
+  max-width: 100%;
+}
+.prose-reply pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: inherit;
+}
+
+.prose-reply blockquote {
+  border-left: 2px solid var(--line-strong);
+  padding-left: 0.9em;
+  color: var(--ink-2);
+}
+
+.prose-reply table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+}
+.prose-reply th,
+.prose-reply td {
+  border: 1px solid var(--line);
+  padding: 0.4em 0.6em;
+  text-align: left;
+}
+.prose-reply th {
+  background: var(--wash);
+  font-weight: 600;
+}
+
+/* Wide content scrolls inside itself; the page never scrolls sideways. */
+.scroll-x {
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+/*
+ * The berth's model label swapping on a provider change. Deliberately the
+ * only keyframe animation in the app.
+ */
+@keyframes berth-swap {
+  from {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

@@ -1,0 +1,16 @@
+/*
+ * Typefaces, bundled rather than fetched.
+ *
+ * ModelDock runs on localhost and should work with no network at all, so the
+ * page never reaches a font CDN. Fontsource ships the woff2 files and their
+ * @font-face rules; Vite fingerprints and inlines them into the build.
+ *
+ * Geist for the interface and for code, Newsreader for assistant prose. Both
+ * are OFL. If a face somehow fails to load, the stacks in tokens.css fall
+ * back to system fonts and nothing about the layout changes.
+ */
+
+@import "@fontsource-variable/geist/index.css";
+@import "@fontsource-variable/geist-mono/index.css";
+@import "@fontsource-variable/newsreader/index.css";
+@import "@fontsource-variable/newsreader/opsz-italic.css";

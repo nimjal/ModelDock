@@ -1,0 +1,43 @@
+# Keep dependencies and workflow actions current.
+#
+# Minor and patch updates are grouped into one pull request per ecosystem.
+# Ungrouped, a project this size produces a steady trickle of individually
+# uninteresting PRs, and the reliable outcome of that is that they stop being
+# read — which is worse than updating a little less often. Majors stay separate
+# because they are the ones that need a person.
+#
+# The actions ecosystem matters more than it looks: this repository pins every
+# action to a commit SHA, so without Dependabot those pins would silently rot
+# and never pick up a security fix.
+
+version: 2
+
+updates:
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        update-types: ["minor", "patch"]
+    ignore:
+      # Held at 12.x deliberately — see the entry in CHANGELOG.md. The 13.x
+      # linux-x64 prebuild segfaults on opening a database, which makes the
+      # store unusable on Linux, and 13.0.0's rewrite onto N-API is the likely
+      # cause. Still unfixed as of 13.0.3, whose only change was an arm runner.
+      #
+      # Without this, the same major is reopened every week and the reason it
+      # was rejected has to be rediscovered each time. Drop this rule once a
+      # 13.x opens a database on linux-x64 without crashing.
+      - dependency-name: better-sqlite3
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
+    groups:
+      actions:
+        update-types: ["minor", "patch"]

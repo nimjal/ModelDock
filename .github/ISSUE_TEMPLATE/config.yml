@@ -1,0 +1,15 @@
+# A blank issue is almost always a bug report or a feature request with the
+# useful questions left unasked, so the two templates are the only way in.
+blank_issues_enabled: false
+
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/nimjal/ModelDock/security/advisories/new
+    about: >
+      Please do not open a public issue. Private advisories let a fix exist
+      before the problem is public. See SECURITY.md for what is in scope.
+
+  - name: Ask a question or suggest an idea
+    url: https://github.com/nimjal/ModelDock/discussions
+    about: >
+      For anything that is not yet a specific bug or a specific request.

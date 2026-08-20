@@ -1,0 +1,20 @@
+# Biome is the source of truth for anything it formats — the values here are
+# copied from biome.jsonc rather than chosen independently, so an editor that
+# reads this file and a `npm run format` afterwards agree. The reason to keep
+# it is the files Biome does not own: YAML, Markdown, and this file's own kind.
+
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+indent_size = 2
+insert_final_newline = true
+trim_trailing_whitespace = true
+max_line_length = 100
+
+# Markdown gives trailing whitespace a meaning — two spaces is a hard break —
+# so stripping it here would silently reflow prose.
+[*.md]
+trim_trailing_whitespace = false

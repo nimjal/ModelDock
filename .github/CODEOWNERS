@@ -1,0 +1,16 @@
+# Review is requested from the owner on everything by default.
+* @nimjal
+
+# Three files decide what reaches somebody's disk: the directory boundary, the
+# mapping from a permission level to what an engine may do, and the shell tool.
+# Listing them changes nothing mechanically — the glob above already covers
+# them — but it puts their names in front of anyone opening a pull request that
+# touches one, which is the point.
+/src/server/files/boundary.ts   @nimjal
+/src/server/files/shell.ts      @nimjal
+/src/server/code/permissions.ts @nimjal
+/src/server/code/approval.ts    @nimjal
+
+# The peer listener is the only thing in the project that answers a request
+# from outside the machine.
+/src/server/sync/peer-http.ts   @nimjal

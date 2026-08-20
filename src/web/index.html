@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ModelDock</title>
+    <meta
+      name="description"
+      content="A unified AI workspace you own. Chat, memory and projects that outlive whichever model is behind them."
+    />
+    <!--
+      Applied before first paint so a dark-theme user never sees a white
+      flash. Deliberately inline and tiny: it reads the same key App.tsx
+      writes and does nothing else.
+    -->
+    <script>
+      (() => {
+        var saved = localStorage.getItem("modeldock.theme");
+        if (saved === "light" || saved === "dark") {
+          document.documentElement.setAttribute("data-theme", saved);
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="./main.tsx"></script>
+  </body>
+</html>
