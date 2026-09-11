@@ -91,20 +91,27 @@ jobs:
       # filename, wrong environment, or never saved. Presence only: the request
       # token is a credential and is never printed.
       #
+      # Two separate things set this floor and the higher one wins. The OIDC
+      # exchange needs 11.5.1; `npm stage` did not exist until 11.15.0, so that
+      # is the number. A runner below it gets all the way to the last step and
+      # fails with `Unknown command: "stage"`, which says nothing about
+      # versions and sends the reader into the workflow file looking for a typo
+      # — worth one honest line up here instead. Above the floor the same step
+      # still earns its keep: it is what distinguishes a workflow problem from
+      # an ENEEDAUTH caused by the npmjs.com configuration.
+      #
       # The floor is asserted rather than installed. `npm install -g npm@latest`
       # is the obvious way to guarantee it and the wrong one: latest is now
       # npm 12, which stopped running dependency install scripts by default, so
       # better-sqlite3 never gets a native binding and the whole suite dies on
       # the first query. Upgrading the toolchain to satisfy a version floor
-      # changes far more than the version. If a future runner image ever drops
-      # below the floor, this says so in one line instead of surfacing as
-      # ENEEDAUTH at the publish step.
+      # changes far more than the version.
       - name: Trusted publishing preconditions
         run: |
-          floor=11.5.1
+          floor=11.15.0
           have="$(npm --version)"
           if [ "$(printf '%s\n%s\n' "$floor" "$have" | sort -V | head -n1)" != "$floor" ]; then
-            echo "::error::npm $have is below the $floor that OIDC publishing needs"
+            echo "::error::npm $have is below the $floor that staged publishing needs"
             exit 1
           fi
 
