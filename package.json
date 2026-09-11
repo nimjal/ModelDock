@@ -75,7 +75,7 @@
   },
   "devDependencies": {
     "@ai-sdk/react": "^4.0.69",
-    "@biomejs/biome": "2.5.10",
+    "@biomejs/biome": "2.5.12",
     "@fontsource-variable/geist": "^5.3.0",
     "@fontsource-variable/geist-mono": "^5.3.0",
     "@fontsource-variable/newsreader": "^5.3.0",
