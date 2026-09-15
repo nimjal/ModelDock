@@ -165,7 +165,8 @@ ModelDock's to interrupt.
 
 **Connections** — Anthropic, OpenAI, Google, Ollama, and anything speaking the OpenAI API.
 That last one covers OpenRouter, LiteLLM, vLLM, LM Studio, Groq, Together and your own
-server — a proxy is just a base URL, so no gateway dependency is needed.
+server — a proxy is just a base URL, so no gateway dependency is needed. And for an API that
+speaks none of those, a **custom script**.
 
 ### Providers
 
@@ -176,6 +177,38 @@ server — a proxy is just a base URL, so no gateway dependency is needed.
 | `google` | Gemini, direct | `GOOGLE_GENERATIVE_AI_API_KEY` |
 | `ollama` | Local models | nothing |
 | `openai_compatible` | Everything else OpenAI-shaped | a base URL, and a key if the endpoint wants one |
+| `script` | Any API at all, as a short JavaScript module | whatever the script uses |
+
+### Custom engines
+
+A script connection is a JavaScript module that ModelDock loads and calls. `chat()` is handed
+the conversation and yields the reply as it arrives, `image()` returns pictures, and `models()`
+fills the model picker. The module is wrapped in the AI SDK's own model interfaces, so chat,
+image generation, the built-in coding engine and the `/v1` gateway use a script exactly as they
+use a vendor.
+
+```js
+export async function* chat(request, ctx) {
+  const response = await ctx.request(ctx.baseUrl + "/generate", {
+    method: "POST",
+    headers: { authorization: "Bearer " + ctx.apiKey },
+    json: { model: request.model, messages: request.messages },
+  });
+  for await (const line of ctx.lines(response)) yield JSON.parse(line).text;
+}
+```
+
+Nobody starts from a blank page. Ollama, ChatGPT, Claude, Gemini, any OpenAI-compatible server
+and the Stable Diffusion WebUI are all templates, written against each API's public wire format,
+and any existing connection can be copied into one with its settings filled in. Every model
+picker — the chip in the header, the defaults in Settings, first run — leads to the editor, whose
+Check and Try buttons load the module and run one turn through it before anything is saved.
+
+Two things to know. A script runs inside ModelDock with full Node access: it is **not
+sandboxed**, so treat one from someone else like any program you would run. And it **never
+syncs** — the connection reaches your other devices, but its code stays on the machine that
+wrote it, refused in both directions, so pairing a device is never a way for it to run code on
+yours. Keys still live in environment variables, and a script reads its own as `ctx.apiKey`.
 
 ### Coding engines
 
@@ -319,6 +352,7 @@ src/server/         Hono API, SQLite via Drizzle, MCP server
   db/               the schema, the migration ladder, and write.ts
   providers/        connection kinds → an AI SDK model
   images/           the same, for the ones that draw
+  scripts/          custom engines: a JavaScript module wrapped as either of the above
   code/             coding engines → a running session, and what each may do
   gateway/          every model, re-served in OpenAI's and Anthropic's protocols
   handoff/          pointing another tool's config at that gateway, reversibly

@@ -7,6 +7,10 @@
  * at all. Putting them next to each other is what makes that legible rather
  * than surprising.
  *
+ * Both lists end with the same way out: an engine for an API none of these
+ * connections speak, written as a script. A script that chats appears in the
+ * first list, one that draws in the second, and one that does both in both.
+ *
  * No colour is spent here. The berth owns the accent, and a settings form that
  * tinted itself with the provider's colour would be the second saturated thing
  * in the app.
@@ -20,10 +24,13 @@ import { ModelPicker } from "./ModelPicker";
 export function WorkspaceDefaults({
   connections,
   onChanged,
+  onCustom,
 }: {
   connections: ConnectionView[];
   /** The berth and the sidebar both read this state, so the shell re-fetches. */
   onChanged: () => void;
+  /** Opens the custom-engine editor, for an API none of these connections speak. */
+  onCustom?: () => void;
 }) {
   const [workspace, setWorkspace] = useState<WorkspaceView | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
@@ -36,13 +43,15 @@ export function WorkspaceDefaults({
     }
   }, []);
 
+  // Re-read when the connections change, because whether a script draws is
+  // decided by the script, and editing one can move it in or out of the list.
   useEffect(() => {
     void load();
-  }, [load]);
+  }, [load, connections]);
 
   /**
-   * Hoisted above every early return and every conditional branch, because it
-   * is a hook. Bound to the chosen connection's id so switching provider
+   * Hoisted above every early return and every conditional branch, because they
+   * are hooks. Each is bound to its chosen connection's id so switching provider
    * re-points the model list rather than showing the previous one's — the same
    * arrangement the berth uses.
    */
@@ -50,6 +59,11 @@ export function WorkspaceDefaults({
   const loadModels = useCallback(
     async () => (await api.models(defaultConnectionId!)).models,
     [defaultConnectionId],
+  );
+  const imageConnectionId = workspace?.images.connectionId ?? null;
+  const loadImageModels = useCallback(
+    async () => (await api.models(imageConnectionId!)).models,
+    [imageConnectionId],
   );
 
   const save = async (body: Parameters<typeof api.updateWorkspace>[0]) => {
@@ -74,8 +88,23 @@ export function WorkspaceDefaults({
   }
 
   const { defaults, images } = workspace;
-  const chosen = connections.find((item) => item.id === defaults.connectionId) ?? null;
+  // A script that only draws cannot be where a conversation starts.
+  const engines = connections.filter((item) => item.capabilities.chat);
+  const chosen = engines.find((item) => item.id === defaults.connectionId) ?? null;
   const imageChoice = images.eligible.find((item) => item.id === images.connectionId) ?? null;
+  const imageConnection = connections.find((item) => item.id === imageChoice?.id) ?? null;
+
+  const customLink = (label: string) =>
+    onCustom && (
+      <button
+        type="button"
+        onClick={onCustom}
+        className="mt-1.5 text-[0.6875rem] transition-colors hover:text-[var(--ink)]"
+        style={{ color: "var(--ink-3)" }}
+      >
+        {label}
+      </button>
+    );
 
   return (
     <>
@@ -90,7 +119,7 @@ export function WorkspaceDefaults({
           label="Connection"
           value={defaults.connectionId}
           onPick={(id) => void save({ defaultConnectionId: id, defaultModel: null })}
-          options={connections.map((item) => ({
+          options={engines.map((item) => ({
             id: item.id,
             name: item.name,
             detail: item.model,
@@ -98,6 +127,7 @@ export function WorkspaceDefaults({
           }))}
           emptyLabel="First one available"
         />
+        {customLink("Not listed? Write a custom engine for any API…")}
 
         {chosen?.ready && (
           <div className="mt-3">
@@ -110,7 +140,8 @@ export function WorkspaceDefaults({
             <ModelPicker
               compact
               value={defaults.model ?? chosen.model}
-              load={loadModels}
+              load={chosen.capabilities.models ? loadModels : null}
+              blocked="This engine has no model list. Type any id it understands."
               onPick={(model) => void save({ defaultModel: model })}
             />
             {defaults.model && (
@@ -145,11 +176,15 @@ export function WorkspaceDefaults({
         </p>
 
         {images.eligible.length === 0 ? (
-          <p className="text-[0.8125rem]" style={{ color: "var(--ink-3)" }}>
-            None of your connections can generate images. Add an OpenAI or Google connection, or an
-            OpenAI-compatible endpoint that serves{" "}
-            <code className="font-mono">/v1/images/generations</code>.
-          </p>
+          <>
+            <p className="text-[0.8125rem]" style={{ color: "var(--ink-3)" }}>
+              None of your connections can generate images. Add an OpenAI or Google connection, an
+              OpenAI-compatible endpoint that serves{" "}
+              <code className="font-mono">/v1/images/generations</code>, or a custom script with an{" "}
+              <code className="font-mono">image()</code> function.
+            </p>
+            {customLink("Write a script that draws…")}
+          </>
         ) : (
           <>
             <Choices
@@ -164,6 +199,7 @@ export function WorkspaceDefaults({
               }))}
               emptyLabel="Off"
             />
+            {customLink("Draw with something else? Write a script for it…")}
 
             {imageChoice && (
               <div className="mt-3">
@@ -173,22 +209,25 @@ export function WorkspaceDefaults({
                 >
                   Image model
                 </p>
-                <input
-                  defaultValue={images.model ?? imageChoice.defaultModel}
+                <p className="mb-1.5 font-mono text-[0.75rem]" style={{ color: "var(--ink-2)" }}>
+                  {images.model ?? (imageChoice.defaultModel || "None chosen yet")}
+                </p>
+                <ModelPicker
+                  compact
+                  prefer="image"
                   key={imageChoice.id}
-                  placeholder={imageChoice.defaultModel || "Model id"}
-                  onBlur={(event) => {
-                    const next = event.target.value.trim();
-                    if (next !== (images.model ?? imageChoice.defaultModel)) {
-                      void save({ imageModel: next || null });
-                    }
-                  }}
-                  className="w-full rounded-[var(--radius-sm)] border px-2.5 py-1.5 text-[0.8125rem] outline-none placeholder:text-[var(--ink-3)]"
-                  style={{
-                    borderColor: "var(--line)",
-                    background: "var(--paper)",
-                    fontFamily: "var(--font-mono)",
-                  }}
+                  value={images.model ?? imageChoice.defaultModel}
+                  load={
+                    imageChoice.ready && imageConnection?.capabilities.models !== false
+                      ? loadImageModels
+                      : null
+                  }
+                  blocked={
+                    imageChoice.ready
+                      ? "This connection has no model list. Type any id it understands."
+                      : "Set that connection up to see what it can draw with."
+                  }
+                  onPick={(model) => void save({ imageModel: model })}
                 />
 
                 {imageChoice.suggestedModels.length > 0 && (
@@ -207,7 +246,23 @@ export function WorkspaceDefaults({
                   </div>
                 )}
 
-                <p className="mt-1.5 text-[0.6875rem]" style={{ color: "var(--ink-3)" }}>
+                {images.model && (
+                  <button
+                    type="button"
+                    onClick={() => void save({ imageModel: null })}
+                    className="mt-1.5 block text-[0.6875rem] transition-colors hover:text-[var(--ink)]"
+                    style={{ color: "var(--ink-3)" }}
+                  >
+                    {imageChoice.defaultModel
+                      ? `Use ${imageChoice.defaultModel} instead`
+                      : "Clear the image model"}
+                  </button>
+                )}
+
+                <p
+                  className="mt-1.5 whitespace-pre-wrap text-[0.6875rem]"
+                  style={{ color: imageChoice.ready ? "var(--ink-3)" : "var(--danger)" }}
+                >
                   {imageChoice.hint}
                 </p>
               </div>
@@ -217,7 +272,9 @@ export function WorkspaceDefaults({
               {images.active
                 ? `The assistant can generate images with ${images.active.name} · ${images.active.model}.`
                 : imageChoice
-                  ? "Set a key for that connection before the tool is offered."
+                  ? imageChoice.ready
+                    ? "Choose an image model before the tool is offered."
+                    : "Set that connection up before the tool is offered."
                   : "Image generation is off — the assistant is not given the tool."}
             </p>
           </>

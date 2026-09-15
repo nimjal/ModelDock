@@ -17,6 +17,13 @@ export interface ConnectionView {
   model: string;
   apiKeyEnv: string | null;
   apiKeySet: boolean;
+  /** The source of a script connection, for the editor. Null on every other kind. */
+  script: string | null;
+  /**
+   * What the connection can be asked for. Known from the kind for a vendor, and
+   * asked of the module for a script — the berth leaves out what cannot chat.
+   */
+  capabilities: { chat: boolean; image: boolean; models: boolean };
   ready: boolean;
   problem: string | null;
 }
@@ -27,10 +34,53 @@ export interface KindSpec {
   defaultApiKeyEnv: string | null;
   defaultBaseUrl: string | null;
   baseUrlEditable: boolean;
+  baseUrlRequired: boolean;
   requiresApiKey: boolean;
+  namedKeyRequired: boolean;
   suggestedModels: string[];
   accent: string;
   hint: string;
+}
+
+/**
+ * Where a custom engine starts. See `scripts/templates.ts`.
+ *
+ * `kind` names the built-in connection kind a template reimplements, which is
+ * how "Customise it as a script" on an existing connection finds its own.
+ */
+export interface ScriptTemplate {
+  id: string;
+  label: string;
+  hint: string;
+  kind: string | null;
+  does: ("chat" | "image" | "models")[];
+  name: string;
+  baseUrl: string | null;
+  apiKeyEnv: string | null;
+  model: string;
+  keyUrl: string | null;
+  script: string;
+}
+
+/** What a script exports, or why it does not load. */
+export interface ScriptInspection {
+  chat: boolean;
+  image: boolean;
+  models: boolean;
+  defaultImageModel: string | null;
+  problem: string | null;
+}
+
+/** One trial turn through a draft script. A failure keeps whatever arrived before it. */
+export interface ScriptTrial {
+  ok: boolean;
+  text?: string;
+  reasoning?: string | null;
+  toolCalls?: { name: string; input: unknown }[];
+  finishReason?: string | null;
+  usage?: { input: number | null; output: number | null };
+  error?: string | null;
+  ms: number;
 }
 
 /** A named service, pre-filled. See `providers/catalog.ts` for kind vs preset. */
@@ -45,11 +95,15 @@ export interface ProviderPreset {
   hint: string;
 }
 
-/** One model a provider says it can run. `chat` is a guess except on Google. */
+/**
+ * One model a provider says it can run. `chat` and `image` are guesses from the
+ * id, except where the provider — Google, or a script — says outright.
+ */
 export interface ModelInfo {
   id: string;
   label: string | null;
   chat: boolean;
+  image: boolean;
 }
 
 /**
@@ -286,9 +340,12 @@ export const api = {
     }>("/health"),
 
   connections: () =>
-    request<{ connections: ConnectionView[]; kinds: KindSpec[]; presets: ProviderPreset[] }>(
-      "/connections",
-    ),
+    request<{
+      connections: ConnectionView[];
+      kinds: KindSpec[];
+      presets: ProviderPreset[];
+      templates: ScriptTemplate[];
+    }>("/connections"),
   createConnection: (body: Partial<ConnectionView>) =>
     post<{ connection: ConnectionView }>("/connections", body),
   updateConnection: (id: string, body: Partial<ConnectionView>) =>
@@ -304,7 +361,24 @@ export const api = {
     baseUrl?: string | null;
     apiKeyEnv?: string | null;
     label?: string;
+    /** A draft script's source, so its models() can be asked before it is saved. */
+    script?: string | null;
   }) => post<{ models: ModelInfo[] }>("/models", body),
+
+  /**
+   * A draft script, before it is saved. `checkScript` loads it and reports what
+   * it exports; `tryScript` runs one short turn through it. Neither stores anything.
+   */
+  checkScript: (body: { script: string; name?: string }) =>
+    post<{ inspection: ScriptInspection }>("/scripts/check", body),
+  tryScript: (body: {
+    script: string;
+    name?: string;
+    baseUrl?: string | null;
+    apiKeyEnv?: string | null;
+    model?: string;
+    prompt?: string;
+  }) => post<ScriptTrial>("/scripts/try", body),
 
   /**
    * Keys are write-only across this boundary.

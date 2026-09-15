@@ -214,6 +214,18 @@ CREATE TABLE IF NOT EXISTS workspace (
 CREATE INDEX IF NOT EXISTS workspace_live_idx ON workspace (updated_at) WHERE deleted_at IS NULL;
 `;
 
+/**
+ * Custom engines: a connection that runs a script instead of speaking a vendor's
+ * protocol.
+ *
+ * One nullable column and nothing else. `kind` needs no change — it is plain
+ * `TEXT` with no CHECK, for the reason `schema.ts` gives on `threads.permission`
+ * — and every existing row having no script is exactly right for its kind.
+ */
+const SCRIPTED = `
+ALTER TABLE connections ADD COLUMN script TEXT;
+`;
+
 /** Ordered. Index + 1 is the `user_version` a database reaches by running it. */
 export const MIGRATIONS: string[] = [
   INITIAL,
@@ -222,6 +234,7 @@ export const MIGRATIONS: string[] = [
   SYNC,
   BUILTIN_AGENT,
   WORKSPACE,
+  SCRIPTED,
 ];
 
 export function runMigrations(sqlite: BetterSqlite3.Database): void {

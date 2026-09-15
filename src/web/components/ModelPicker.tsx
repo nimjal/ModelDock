@@ -17,6 +17,11 @@
  * component ends with a model id you could have typed yourself, and a provider
  * that is unreachable, keyless or simply has no `/models` endpoint degrades to
  * exactly that rather than to a dead end.
+ *
+ * A custom *engine* is the other half of "custom", and deliberately not here.
+ * An API ModelDock does not speak at all is a connection of its own, written as
+ * a script — see `ScriptEditor.tsx`. This field chooses a model on an engine
+ * that already exists, one of those included.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -37,9 +42,22 @@ interface ModelPickerProps {
   blocked?: string | null;
   /** Rows before the list scrolls. The berth is tighter than a settings form. */
   compact?: boolean;
+  /**
+   * Which models lead. The image picker wants the ones that draw, the chat
+   * picker the ones that talk; the rest are always one click away.
+   */
+  prefer?: "chat" | "image";
 }
 
-export function ModelPicker({ value, onPick, load, autoLoad, blocked, compact }: ModelPickerProps) {
+export function ModelPicker({
+  value,
+  onPick,
+  load,
+  autoLoad,
+  blocked,
+  compact,
+  prefer = "chat",
+}: ModelPickerProps) {
   const [models, setModels] = useState<ModelInfo[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
@@ -81,12 +99,19 @@ export function ModelPicker({ value, onPick, load, autoLoad, blocked, compact }:
     const matching = typed
       ? all.filter((model) => model.id.toLowerCase().includes(typed.toLowerCase()))
       : all;
-    const chat = matching.filter((model) => model.chat);
+    const preferred = matching.filter((model) => (prefer === "image" ? model.image : model.chat));
+
+    // A list with none of the preferred kind — a script that did not say, an
+    // endpoint with unusual names — is shown whole, rather than as an empty box
+    // with "Show 12 more" under it.
+    if (preferred.length === 0) return { shown: matching, hiddenCount: 0 };
+
+    const rest = matching.filter((model) => !preferred.includes(model));
     return {
-      shown: showAll ? matching : chat,
-      hiddenCount: matching.length - chat.length,
+      shown: showAll ? [...preferred, ...rest] : preferred,
+      hiddenCount: rest.length,
     };
-  }, [models, typed, showAll]);
+  }, [models, typed, showAll, prefer]);
 
   // Offered whenever what is typed is not already an exact id in the list. This
   // is the whole custom-model affordance, and it is why an unreachable provider
@@ -145,7 +170,11 @@ export function ModelPicker({ value, onPick, load, autoLoad, blocked, compact }:
             onClick={() => setShowAll((current) => !current)}
             className="ml-auto transition-colors hover:text-[var(--ink)]"
           >
-            {showAll ? "Chat models only" : `Show ${hiddenCount} more`}
+            {showAll
+              ? prefer === "image"
+                ? "Image models only"
+                : "Chat models only"
+              : `Show ${hiddenCount} more`}
           </button>
         )}
       </div>

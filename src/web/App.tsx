@@ -280,6 +280,7 @@ export function App() {
             model={activeAgent ? null : (activeThread?.model ?? null)}
             connections={connections}
             onSelect={(id, picked) => void dock(id, picked)}
+            onCustom={() => goTo({ kind: "connections", compose: "script", at: Date.now() })}
           />
         </header>
 
@@ -334,6 +335,10 @@ export function App() {
 
             {surface.kind === "connections" && (
               <ConnectionsPanel
+                // Keyed on the request, so asking for a new engine again opens
+                // the editor again even when this screen is already showing.
+                key={surface.compose ? `${surface.compose}-${surface.at ?? 0}` : "list"}
+                startScript={surface.compose === "script"}
                 onChanged={() => void refresh()}
                 onSetUp={() => goTo({ kind: "welcome" })}
               />
@@ -344,6 +349,7 @@ export function App() {
                 theme={theme}
                 onTheme={setTheme}
                 connections={connections}
+                onCustom={() => goTo({ kind: "connections", compose: "script", at: Date.now() })}
                 onChanged={() => void refresh()}
               />
             )}

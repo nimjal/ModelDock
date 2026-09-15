@@ -60,6 +60,11 @@ node dist/cli.js      # run what you just built
 src/server/         Hono API, SQLite via Drizzle, MCP server
   db/               schema, migrations, and the one place that writes
   providers/        connection kinds → an AI SDK model
+  scripts/          custom engines: a JavaScript module, wrapped as an AI SDK model
+    runtime.ts        loading and inspecting a script, and the ctx it is handed
+    language.ts         a script as a language model — the prompt in, the stream protocol out
+    image.ts             a script as an image model
+    templates.ts          Ollama, ChatGPT, Claude and the rest, written out as scripts
   code/             coding agent kinds → a running session
     adapter.ts        the interface every engine implements
     catalog.ts         pure metadata about each kind

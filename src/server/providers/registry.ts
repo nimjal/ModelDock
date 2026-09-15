@@ -9,6 +9,10 @@
  * Keys are read from the environment at call time. They are never stored on
  * the connection row, never logged, and never returned to the browser; the
  * database holds the *name* of a variable, not its value.
+ *
+ * A `script` connection is the one arm that is not a vendor. It still returns a
+ * `LanguageModel` — `scripts/language.ts` wraps the module in the SDK's own
+ * interface — so nothing downstream of this function has to know it exists.
  */
 
 import { createAnthropic } from "@ai-sdk/anthropic";
@@ -18,9 +22,20 @@ import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import type { LanguageModel } from "ai";
 
 import type { Connection } from "../db/schema.js";
+import { ScriptLanguageModel } from "../scripts/language.js";
 import { KINDS } from "./catalog.js";
 
 export class ConnectionError extends Error {}
+
+/**
+ * What a script connection with no script says.
+ *
+ * Worded for the case it usually is: a row that arrived from another device,
+ * where the script deliberately did not follow it. See `sync/tables.ts`.
+ */
+export function noScript(name: string): string {
+  return `"${name}" has no script on this machine. Scripts never sync between devices — open it under Connections to add one here.`;
+}
 
 /** The API key for a connection, or null when the kind does not need one. */
 export function resolveApiKey(
@@ -38,7 +53,10 @@ export function resolveApiKey(
 
   const value = process.env[connection.apiKeyEnv];
   if (!value) {
-    if (spec?.requiresApiKey) {
+    // A kind that needs no key can still be given one. For most kinds that is
+    // optional, but a script names a variable only because it uses one — see
+    // `namedKeyRequired` in the catalog.
+    if (spec?.requiresApiKey || spec?.namedKeyRequired) {
       throw new ConnectionError(
         `${connection.apiKeyEnv} is not set in this environment, so "${connection.name}" cannot be used yet.`,
       );
@@ -48,8 +66,18 @@ export function resolveApiKey(
   return value;
 }
 
-/** Everything that has to be true before a connection can answer a turn. */
+/**
+ * Everything that has to be true before a connection can answer a turn.
+ *
+ * Synchronous, so for a script it checks that there *is* one and no more.
+ * Whether it loads is asynchronous and asked separately — by the Connections
+ * screen, `doctor` and the gateway — through `inspectScript`.
+ */
 export function checkConnection(connection: Connection): { ok: boolean; problem?: string } {
+  if (connection.kind === "script" && !connection.script?.trim()) {
+    return { ok: false, problem: noScript(connection.name) };
+  }
+
   try {
     resolveApiKey(connection);
   } catch (error) {
@@ -57,7 +85,7 @@ export function checkConnection(connection: Connection): { ok: boolean; problem?
   }
 
   const spec = KINDS[connection.kind];
-  if (spec?.baseUrlEditable && !connection.baseUrl) {
+  if (spec?.baseUrlRequired && !connection.baseUrl) {
     return { ok: false, problem: `"${connection.name}" needs a base URL.` };
   }
   if (!connection.model) {
@@ -105,6 +133,20 @@ export function resolveModel(connection: Connection, modelOverride?: string | nu
         // an absent key stays absent rather than becoming an empty string.
         ...(apiKey ? { apiKey } : {}),
       })(model);
+    }
+
+    case "script": {
+      // Only emptiness is checked here. Whether the script parses is found out
+      // when it is first called, because loading is asynchronous and this
+      // function is not — and the Connections screen has said so already.
+      if (!connection.script?.trim()) throw new ConnectionError(noScript(connection.name));
+      return new ScriptLanguageModel({
+        name: connection.name,
+        script: connection.script,
+        baseUrl: connection.baseUrl,
+        apiKey,
+        modelId: model,
+      });
     }
 
     default: {

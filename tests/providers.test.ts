@@ -52,6 +52,12 @@ describe("resolveModel", () => {
         baseUrl: "http://localhost:11434/v1",
         apiKeyEnv: null,
       }),
+      connection({
+        kind: "script",
+        model: "anything",
+        apiKeyEnv: null,
+        script: "export function chat() { return 'hi'; }",
+      }),
     ];
 
     for (const row of cases) {

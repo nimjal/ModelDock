@@ -18,6 +18,7 @@ import { AGENT_LIST } from "../code/catalog.js";
 import { agentsFresh, checkAgent } from "../code/registry.js";
 import { keyStatus, keysLocation, savedNames } from "../keys.js";
 import { checkConnection } from "../providers/registry.js";
+import { inspectScript } from "../scripts/runtime.js";
 import { syncSkills } from "../skills/scan.js";
 
 export const healthRoutes = new Hono();
@@ -48,7 +49,13 @@ export async function runChecks(): Promise<Check[]> {
     });
   } else {
     for (const row of rows) {
-      const status = checkConnection(row);
+      let status = checkConnection(row);
+      // A script can be fully configured and still not load, and a syntax error
+      // is exactly what this report exists to surface. Only the module can say.
+      if (status.ok && row.kind === "script") {
+        const { problem } = await inspectScript(row);
+        if (problem) status = { ok: false, problem };
+      }
       // Where the key came from, named on the row that uses it. Without this,
       // a connection that works because of a key typed into the app looks
       // identical to one working off a variable exported in this shell — and

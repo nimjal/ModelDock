@@ -16,7 +16,9 @@ export type Surface =
   | { kind: "project"; id: string }
   | { kind: "memory" }
   | { kind: "skills" }
-  | { kind: "connections" }
+  // `compose` opens it with a new custom engine under way, which is where the
+  // berth's and Settings' "Custom engine…" lead.
+  | { kind: "connections"; compose?: "script"; at?: number }
   // First run, and reachable from Connections afterwards. Deliberately not in
   // the rail: a permanent "get started" entry is a permanent suggestion that
   // you have not started.

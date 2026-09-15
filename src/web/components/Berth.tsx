@@ -10,6 +10,10 @@
  * A connection whose key is missing shows the same shape with a hollow dot
  * rather than an error state, because "not set up yet" is a normal condition
  * on a machine with four providers configured and one key exported.
+ *
+ * The last row in the list is a way out of it rather than a member: an engine
+ * for an API none of these connections speak, written as a script. It opens the
+ * editor under Connections, where there is room to write one.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -28,6 +32,8 @@ interface BerthProps {
    * default"; passing one changes the model without disturbing the provider.
    */
   onSelect: (connectionId: string, model?: string) => void;
+  /** Opens the custom-engine editor. Absent where there is nowhere to open it. */
+  onCustom?: () => void;
   disabled?: boolean;
 }
 
@@ -67,13 +73,25 @@ function AgentBerth({ agent, model }: { agent: AgentView; model: string | null }
   );
 }
 
-export function Berth({ connection, agent, model, connections, onSelect, disabled }: BerthProps) {
+export function Berth({
+  connection,
+  agent,
+  model,
+  connections,
+  onSelect,
+  onCustom,
+  disabled,
+}: BerthProps) {
   const [open, setOpen] = useState(false);
   const [flash, setFlash] = useState(false);
   const previous = useRef<string | null>(null);
   const root = useRef<HTMLDivElement>(null);
 
   const shownModel = model || connection?.model || null;
+
+  // A connection that only draws is not an engine anyone can talk to, so it is
+  // not offered here. It is offered under Image generation instead.
+  const engines = connections.filter((item) => item.capabilities.chat);
 
   // The one orchestrated moment in the app: on a provider change the chip
   // takes its new colour and the label swaps. Nothing else animates, which is
@@ -172,7 +190,7 @@ export function Berth({ connection, agent, model, connections, onSelect, disable
 
       {open && (
         <div
-          className="absolute right-0 z-30 mt-1.5 max-h-[80vh] w-[22rem] overflow-y-auto rounded-[var(--radius)] border shadow-lg"
+          className="absolute right-0 z-30 mt-1.5 max-h-[80vh] w-[22rem] max-w-[calc(100vw-2rem)] overflow-y-auto rounded-[var(--radius)] border shadow-lg"
           style={{ background: "var(--surface)", borderColor: "var(--line)" }}
         >
           <p
@@ -182,14 +200,14 @@ export function Berth({ connection, agent, model, connections, onSelect, disable
             Docked engine
           </p>
 
-          {connections.length === 0 && (
+          {engines.length === 0 && (
             <p className="px-3 pb-3 text-[0.8125rem]" style={{ color: "var(--ink-2)" }}>
               No connections yet.
             </p>
           )}
 
           <div role="listbox" aria-label="Docked engine">
-            {connections.map((item) => (
+            {engines.map((item) => (
               <button
                 key={item.id}
                 type="button"
@@ -222,6 +240,7 @@ export function Berth({ connection, agent, model, connections, onSelect, disable
                     className="block truncate font-mono text-[0.6875rem]"
                     style={{ color: "var(--ink-3)" }}
                   >
+                    {item.kind === "script" ? "script · " : ""}
                     {item.model}
                   </span>
                   {!item.ready && item.problem && (
@@ -236,6 +255,33 @@ export function Berth({ connection, agent, model, connections, onSelect, disable
               </button>
             ))}
           </div>
+
+          {onCustom && (
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                onCustom();
+              }}
+              className="flex w-full items-start gap-2.5 px-3 py-2 text-left transition-colors hover:bg-[var(--wash)]"
+            >
+              <span
+                aria-hidden
+                className="mt-[0.3125rem] flex size-2 shrink-0 items-center justify-center font-mono text-[0.75rem] leading-none"
+                style={{ color: "var(--ink-3)" }}
+              >
+                +
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-[0.8125rem]" style={{ color: "var(--ink-2)" }}>
+                  Custom engine…
+                </span>
+                <span className="block text-[0.6875rem]" style={{ color: "var(--ink-3)" }}>
+                  Any API, as a short script. Ollama, ChatGPT and Claude are templates.
+                </span>
+              </span>
+            </button>
+          )}
 
           {/*
             The model, under the provider that serves it, because that is the
@@ -253,9 +299,10 @@ export function Berth({ connection, agent, model, connections, onSelect, disable
               </p>
               <ModelPicker
                 compact
-                autoLoad
+                autoLoad={connection.capabilities.models}
                 value={shownModel}
-                load={loadModels}
+                load={connection.capabilities.models ? loadModels : null}
+                blocked="This engine has no model list. Type any id it understands."
                 onPick={(picked) => {
                   onSelect(connection.id, picked);
                   setOpen(false);

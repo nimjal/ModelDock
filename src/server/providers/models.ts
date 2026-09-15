@@ -13,13 +13,17 @@
  * be adjacent. Reaching for them directly here keeps `registry.ts` a pure
  * mapping and keeps this file honest about being glue.
  *
+ * A script lists through its own `models()` export, when it has one. That is
+ * the fifth shape, and the only one this file does not know the wire format of.
+ *
  * **Nothing is hidden.** Every id the endpoint returns is passed on, with
- * `chat` marking whether it looks like something you can hold a conversation
- * with. A picker that silently dropped a model would be indistinguishable from
- * a provider that never had it, and the filter is a guess about naming — so the
- * guess is a flag the screen can ignore, not a deletion.
+ * `chat` and `image` marking what it looks like. A picker that silently dropped
+ * a model would be indistinguishable from a provider that never had it, and the
+ * flags are a guess about naming — so the guess is something the screen can
+ * ignore, not a deletion.
  */
 
+import { annotate, loadScript, preview, scriptContext } from "../scripts/runtime.js";
 import type { ConnectionKind } from "./catalog.js";
 import { ConnectionError } from "./registry.js";
 
@@ -30,10 +34,15 @@ export interface ModelInfo {
   /**
    * Whether this looks like a conversational model.
    *
-   * A guess everywhere except Google, which says so outright. The picker shows
-   * these first and keeps the rest behind a toggle.
+   * A guess everywhere except Google, which says so outright, and scripts that
+   * say. The chat picker shows these first and keeps the rest behind a toggle.
    */
   chat: boolean;
+  /**
+   * Whether this looks like something that draws. The same kind of guess, for
+   * the image picker, which shows these first.
+   */
+  image: boolean;
 }
 
 /** Long enough for a cold endpoint, short enough that a wrong URL fails visibly. */
@@ -54,8 +63,21 @@ const GOOGLE_BASE = "https://generativelanguage.googleapis.com/v1beta";
 const NOT_CHAT =
   /(^|[-_/])(embed|embedding|embeddings|whisper|tts|moderation|rerank|reranker|dall-e|dalle|sora|clip|stable-diffusion|sdxl|flux|imagen|veo|transcribe|speech|audio|image|vision-encoder|guard|bge|gte|e5)([-_.]|$)/i;
 
+/**
+ * Ids that name an image model.
+ *
+ * Narrower than `NOT_CHAT` on purpose. Being wrong there demotes a model; being
+ * wrong here would put a chat model at the top of a list of things that draw.
+ */
+const DRAWS =
+  /(^|[-_/.])(dall-e|dalle|gpt-image|imagen|image|flux|sdxl|stable-diffusion|sd3|recraft|ideogram)([-_.:/]|\d|$)/i;
+
 function looksConversational(id: string): boolean {
   return !NOT_CHAT.test(id);
+}
+
+function looksLikeImage(id: string): boolean {
+  return DRAWS.test(id);
 }
 
 export interface ListTarget {
@@ -64,6 +86,8 @@ export interface ListTarget {
   apiKey?: string | null;
   /** Only used in messages, so a failure names the thing the person clicked. */
   label?: string;
+  /** The module source, for a script connection. */
+  script?: string | null;
 }
 
 /** Trailing slashes are common in a pasted base URL and break path joins. */
@@ -109,7 +133,7 @@ async function get(url: string, headers: Record<string, string>, who: string): P
   }
 }
 
-/** The OpenAI `/models` shape, which every kind here uses except Google. */
+/** The OpenAI `/models` shape, which every vendor kind here uses except Google. */
 interface OpenAiList {
   data?: { id?: unknown; display_name?: unknown }[];
 }
@@ -123,7 +147,7 @@ function fromOpenAiShape(payload: unknown, who: string): ModelInfo[] {
   return rows
     .map((row) => (typeof row?.id === "string" ? row.id : null))
     .filter((id): id is string => Boolean(id))
-    .map((id) => ({ id, label: null, chat: looksConversational(id) }));
+    .map((id) => ({ id, label: null, chat: looksConversational(id), image: looksLikeImage(id) }));
 }
 
 /**
@@ -151,6 +175,7 @@ async function listAnthropic(apiKey: string): Promise<ModelInfo[]> {
         id: row.id,
         label: typeof row.display_name === "string" ? row.display_name : null,
         chat: true,
+        image: false,
       });
     }
 
@@ -164,7 +189,7 @@ async function listAnthropic(apiKey: string): Promise<ModelInfo[]> {
 /**
  * Google names models `models/gemini-…` and says outright which ones can hold a
  * conversation, so this is the one kind where `chat` is reported rather than
- * guessed.
+ * guessed. Imagen is the models that `predict`.
  */
 async function listGoogle(apiKey: string): Promise<ModelInfo[]> {
   const models: ModelInfo[] = [];
@@ -184,10 +209,12 @@ async function listGoogle(apiKey: string): Promise<ModelInfo[]> {
       const methods = Array.isArray(row.supportedGenerationMethods)
         ? row.supportedGenerationMethods
         : [];
+      const id = row.name.replace(/^models\//, "");
       models.push({
-        id: row.name.replace(/^models\//, ""),
+        id,
         label: typeof row.displayName === "string" ? row.displayName : null,
         chat: methods.includes("generateContent"),
+        image: methods.includes("predict") || looksLikeImage(id),
       });
     }
 
@@ -196,6 +223,85 @@ async function listGoogle(apiKey: string): Promise<ModelInfo[]> {
   }
 
   return models;
+}
+
+/**
+ * A script's own list, from its `models()` export.
+ *
+ * Entries can be bare ids or `{ id, label, chat, image }`, and whatever a script
+ * leaves out is guessed from the id, the same as for an OpenAI-shaped list. An
+ * entry that is neither is skipped rather than failing the whole list — one odd
+ * entry should not cost someone the other forty.
+ *
+ * Raced against the timeout as well as handed a signal, because a script is
+ * free to ignore the signal, and a listing that never answers is a picker that
+ * never stops saying "Asking…".
+ */
+async function listScript(target: ListTarget, who: string): Promise<ModelInfo[]> {
+  const module = await loadScript({ name: who, script: target.script });
+
+  if (typeof module.models !== "function") {
+    throw new ConnectionError(
+      `${who}'s script has no models() export, so there is no list to fetch — enter a model name instead.`,
+    );
+  }
+
+  const ctx = scriptContext({
+    name: who,
+    model: "",
+    baseUrl: target.baseUrl,
+    apiKey: target.apiKey,
+    signal: AbortSignal.timeout(TIMEOUT_MS),
+  });
+
+  let timer: NodeJS.Timeout | undefined;
+  const late = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new ConnectionError(`${who}'s models() did not answer in time.`)),
+      TIMEOUT_MS,
+    );
+  });
+
+  let listed: unknown;
+  try {
+    listed = await Promise.race([Promise.resolve(module.models(ctx)), late]);
+  } catch (error) {
+    throw annotate(error);
+  } finally {
+    clearTimeout(timer);
+  }
+
+  if (!Array.isArray(listed)) {
+    throw new ConnectionError(`${who}'s models() returned ${preview(listed)} rather than a list.`);
+  }
+
+  return listed.flatMap((entry): ModelInfo[] => {
+    if (typeof entry === "string") {
+      return entry
+        ? [
+            {
+              id: entry,
+              label: null,
+              chat: looksConversational(entry),
+              image: looksLikeImage(entry),
+            },
+          ]
+        : [];
+    }
+    if (typeof entry !== "object" || entry === null) return [];
+
+    const { id, label, chat, image } = entry as Record<string, unknown>;
+    if (typeof id !== "string" || !id) return [];
+
+    return [
+      {
+        id,
+        label: typeof label === "string" && label ? label : null,
+        chat: typeof chat === "boolean" ? chat : looksConversational(id),
+        image: typeof image === "boolean" ? image : looksLikeImage(id),
+      },
+    ];
+  });
 }
 
 /**
@@ -242,6 +348,11 @@ export async function listModels(target: ListTarget): Promise<ModelInfo[]> {
       // can reject one it did not expect.
       const headers: Record<string, string> = key ? { authorization: `Bearer ${key}` } : {};
       models = fromOpenAiShape(await get(`${trimUrl(base)}/models`, headers, who), who);
+      break;
+    }
+
+    case "script": {
+      models = await listScript({ ...target, apiKey: key }, who);
       break;
     }
 

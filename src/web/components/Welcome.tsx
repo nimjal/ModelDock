@@ -30,8 +30,10 @@ import {
   type KeyStatus,
   type KindSpec,
   type ProviderPreset,
+  type ScriptTemplate,
 } from "../lib/api";
 import { ModelPicker } from "./ModelPicker";
+import { ScriptEditor } from "./ScriptEditor";
 
 /** Base URLs differ by trailing slash and case far more often than in substance. */
 const sameUrl = (a: string | null | undefined, b: string | null | undefined) =>
@@ -47,6 +49,7 @@ export function Welcome({
 }) {
   const [presets, setPresets] = useState<ProviderPreset[]>([]);
   const [kinds, setKinds] = useState<KindSpec[]>([]);
+  const [templates, setTemplates] = useState<ScriptTemplate[]>([]);
   const [connections, setConnections] = useState<ConnectionView[]>([]);
   const [keys, setKeys] = useState<KeyStatus[]>([]);
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -56,6 +59,7 @@ export function Welcome({
     const [connectionData, keyData] = await Promise.all([api.connections(), api.keys()]);
     setPresets(connectionData.presets);
     setKinds(connectionData.kinds);
+    setTemplates(connectionData.templates);
     setConnections(connectionData.connections);
     setKeys(keyData.keys);
     setWhere(keyData.path);
@@ -120,6 +124,16 @@ export function Welcome({
             onChanged={refresh}
           />
         ))}
+        <ScriptRow
+          templates={templates}
+          scripts={connections.filter((item) => item.kind === "script")}
+          open={expanded === "script"}
+          onToggle={() => setExpanded((current) => (current === "script" ? null : "script"))}
+          onSaved={async () => {
+            setExpanded(null);
+            await refresh();
+          }}
+        />
       </ul>
 
       <div className="mt-7 flex items-center gap-3">
@@ -454,6 +468,66 @@ function PresetRow({
           >
             {connection ? "Update" : "Add"} {preset.label}
           </button>
+        </div>
+      )}
+    </li>
+  );
+}
+
+/**
+ * The last row: an engine for any API, written as a script.
+ *
+ * Here as well as under Connections, because first run is where someone with a
+ * server ModelDock does not speak finds out whether they can use it at all. It
+ * opens on the Ollama template, which needs no key and is the likeliest thing
+ * to already be running on the same machine.
+ */
+function ScriptRow({
+  templates,
+  scripts,
+  open,
+  onToggle,
+  onSaved,
+}: {
+  templates: ScriptTemplate[];
+  scripts: ConnectionView[];
+  open: boolean;
+  onToggle: () => void;
+  onSaved: () => void | Promise<void>;
+}) {
+  const ready = scripts.filter((item) => item.ready);
+
+  return (
+    <li className="border-b" style={{ borderColor: "var(--line)" }}>
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        className="flex w-full items-start gap-3 py-3 text-left transition-colors hover:bg-[var(--wash)]"
+      >
+        <span
+          aria-hidden
+          className="mt-1.5 size-2 shrink-0 rounded-full"
+          style={{
+            background: ready.length > 0 ? "var(--ink-3)" : "transparent",
+            boxShadow: ready.length > 0 ? undefined : "inset 0 0 0 1.5px var(--ink-3)",
+          }}
+        />
+        <span className="min-w-0 flex-1">
+          <span className="block text-[0.875rem] font-medium">Custom script</span>
+          <span className="block text-[0.75rem]" style={{ color: "var(--ink-3)" }}>
+            Any API at all, in a few lines of JavaScript. Ollama, ChatGPT and Claude are here as
+            templates to start from.
+          </span>
+        </span>
+        <span className="shrink-0 pt-0.5 text-[0.75rem]" style={{ color: "var(--ink-2)" }}>
+          {ready.length > 0 ? `${ready.length} ready` : "Write your own"}
+        </span>
+      </button>
+
+      {open && templates.length > 0 && (
+        <div className="pb-4">
+          <ScriptEditor templates={templates} onCancel={onToggle} onSaved={onSaved} />
         </div>
       )}
     </li>

@@ -18,6 +18,7 @@ import { connections, type Connection } from "../db/schema.js";
 import { HttpError } from "../errors.js";
 import { IMAGE_KIND_LIST, canGenerateImages, imageKindFor } from "../images/catalog.js";
 import { checkConnection } from "../providers/registry.js";
+import { inspectScript } from "../scripts/runtime.js";
 import { chatDefault, imageEngine, updateWorkspace, workspaceRow } from "../workspace.js";
 
 export const workspaceRoutes = new Hono();
@@ -35,6 +36,42 @@ const live = (db: Db): Connection[] =>
     .where(isNull(connections.deletedAt))
     .orderBy(asc(connections.createdAt))
     .all();
+
+/**
+ * Which connections could be picked to draw, with the ineligible ones absent.
+ *
+ * Anthropic has no image model, so an Anthropic connection is not an option —
+ * see `images/catalog.ts`. A script is asked: one that loads and has no
+ * `image()` is left out the same way, while one that does not load stays, not
+ * ready, with the reason as its hint — hiding it would make a syntax error look
+ * like a setting that quietly reset itself.
+ */
+async function eligible(rows: Connection[]) {
+  const found = await Promise.all(
+    rows
+      .filter((item) => canGenerateImages(item.kind))
+      .map(async (item) => {
+        const spec = imageKindFor(item.kind);
+        const option = {
+          id: item.id,
+          name: item.name,
+          kind: item.kind,
+          ready: checkConnection(item).ok,
+          suggestedModels: spec?.suggestedModels ?? [],
+          defaultModel: spec?.defaultModel ?? "",
+          hint: spec?.hint ?? "",
+        };
+        if (item.kind !== "script" || !item.script?.trim()) return option;
+
+        const inspection = await inspectScript(item);
+        if (inspection.problem) return { ...option, ready: false, hint: inspection.problem };
+        if (!inspection.image) return null;
+        return { ...option, defaultModel: inspection.defaultImageModel ?? item.model };
+      }),
+  );
+
+  return found.filter((item) => item !== null);
+}
 
 /**
  * The safe projection, in one place so GET and PATCH cannot describe the same
@@ -69,22 +106,7 @@ async function present(database: Db) {
       active: engine
         ? { connectionId: engine.connection.id, name: engine.connection.name, model: engine.model }
         : null,
-      /**
-       * Which connections could be picked, with the ineligible ones simply
-       * absent. Anthropic has no image model, so an Anthropic connection is not
-       * an option here — see `images/catalog.ts`.
-       */
-      eligible: rows
-        .filter((item) => canGenerateImages(item.kind))
-        .map((item) => ({
-          id: item.id,
-          name: item.name,
-          kind: item.kind,
-          ready: checkConnection(item).ok,
-          suggestedModels: imageKindFor(item.kind)?.suggestedModels ?? [],
-          defaultModel: imageKindFor(item.kind)?.defaultModel ?? "",
-          hint: imageKindFor(item.kind)?.hint ?? "",
-        })),
+      eligible: await eligible(rows),
       kinds: IMAGE_KIND_LIST,
     },
   };
@@ -138,6 +160,19 @@ workspaceRoutes.patch("/workspace", async (c) => {
         400,
         `${row.name} cannot generate images. Point image generation at OpenAI, Google, or a local endpoint instead — the model you chat with does not have to be the one that draws.`,
       );
+    }
+    // A script that loads and plainly has no `image()` is refused now, in a
+    // sentence, rather than accepted and then silently never offered. One that
+    // does not load is accepted: the problem is the script, and fixing it
+    // should not mean choosing it again.
+    if (row?.kind === "script" && row.script?.trim()) {
+      const inspection = await inspectScript(row);
+      if (!inspection.problem && !inspection.image) {
+        throw new HttpError(
+          400,
+          `${row.name}'s script has no image() export, so it cannot draw. Add one, or choose another connection.`,
+        );
+      }
     }
     changes.imageConnectionId = row?.id ?? null;
   }

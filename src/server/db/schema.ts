@@ -49,11 +49,20 @@ export const connections = sqliteTable("connections", {
   id: id(),
   name: text("name").notNull().unique(),
   kind: text("kind", {
-    enum: ["anthropic", "openai", "google", "openai_compatible", "ollama"],
+    enum: ["anthropic", "openai", "google", "openai_compatible", "ollama", "script"],
   }).notNull(),
   baseUrl: text("base_url"),
   model: text("model").notNull(),
   apiKeyEnv: text("api_key_env"),
+  /**
+   * The module a `script` connection runs, as source. Null for every other kind.
+   *
+   * The one column in this store that is executable, which is why it is the one
+   * column of `connections` that never syncs — see `sync/tables.ts`. It still
+   * holds no key: a script reads the variable named in `apiKeyEnv` through
+   * `ctx.apiKey`, at call time, like everything else.
+   */
+  script: text("script"),
   ...lifecycle,
 });
 

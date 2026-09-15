@@ -224,6 +224,41 @@ describe("two devices changing the same thread", () => {
 });
 
 describe("what stays on the machine that wrote it", () => {
+  it("never sends a script, and drops one that arrives anyway", async () => {
+    const row = put(a, connections, {
+      name: "Engine",
+      kind: "script",
+      model: "m",
+      script: "export function chat() { return 'from A'; }",
+    });
+
+    await syncBoth(a, b, cursors);
+
+    const [landed] = b.select().from(connections).all();
+    // The row travels, because threads and the workspace can point at it.
+    expect(landed?.name).toBe("Engine");
+    // The code does not. Pairing is trust in another device's data, and a
+    // script arriving by sync would be that device running code here.
+    expect(landed?.script).toBeNull();
+
+    // Refused on the way in as well as left unsent on the way out, so a peer
+    // running a build that sends one regardless gets nowhere.
+    applyChanges(b, [
+      {
+        seq: 999,
+        tbl: "connections",
+        rowId: row.id,
+        at: row.updatedAt + 60_000,
+        origin: "device-elsewhere",
+        cols: { model: "n", script: "export function chat() { return 'from elsewhere'; }" },
+      },
+    ]);
+
+    const [after] = b.select().from(connections).all();
+    expect(after?.model).toBe("n");
+    expect(after?.script).toBeNull();
+  });
+
   it("never sends a project's directory", async () => {
     put(a, projects, { name: "Harbor", slug: "harbor", directory: "/home/a/harbor" });
 

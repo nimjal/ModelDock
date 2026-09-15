@@ -18,6 +18,18 @@ understanding that before `1.0.0`, `0.x` releases can include breaking changes.
 
 ### Added
 
+- **Custom engines, as scripts.** A connection can be a short JavaScript module
+  instead of a vendor: `chat()` streams a reply, `image()` draws, `models()`
+  fills the picker. It is wrapped in the AI SDK's own model interfaces, so chat,
+  `generate_image`, the built-in coding engine and the `/v1` gateway run it
+  unchanged. Ollama, ChatGPT, Claude, Gemini, OpenAI-compatible servers and the
+  Stable Diffusion WebUI ship as templates, any existing connection can be
+  copied into one, and every model picker leads to an editor that checks a
+  script and runs a trial turn before it is saved. Scripts run unsandboxed with
+  full Node access, and never sync between devices in either direction.
+- **The image model in Settings is a picker.** It lists what the chosen
+  connection can draw with, image models first, where it used to be a text
+  field.
 - **A default model for every new chat.** A workspace-wide default connection
   and model, stamped onto a thread when it is created rather than resolved at
   the first turn — so the berth names the right engine the moment a chat opens

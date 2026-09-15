@@ -22,7 +22,8 @@ import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import type { ImageModel } from "ai";
 
 import type { Connection } from "../db/schema.js";
-import { ConnectionError, resolveApiKey } from "../providers/registry.js";
+import { ConnectionError, noScript, resolveApiKey } from "../providers/registry.js";
+import { ScriptImageModel } from "../scripts/image.js";
 import { imageKindFor } from "./catalog.js";
 
 /**
@@ -50,7 +51,13 @@ export function resolveImageModel(
     throw new ConnectionError(`${connection.name} cannot generate images.`);
   }
 
-  const model = modelOverride?.trim() || spec.defaultModel || "";
+  // A script has no kind-wide default. `imageEngine` resolves one from the
+  // module before it gets here; a caller that did not gets the connection's own
+  // model, which for a script that only draws is the image model anyway.
+  const model =
+    modelOverride?.trim() ||
+    spec.defaultModel ||
+    (connection.kind === "script" ? connection.model : "");
   if (!model) {
     throw new ConnectionError(
       `"${connection.name}" has no image model set. Choose one in Settings under Image generation.`,
@@ -89,6 +96,19 @@ export function resolveImageModel(
         // gives: a local server can reject a bearer token it never asked for.
         ...(apiKey ? { apiKey } : {}),
       }).imageModel(model);
+    }
+
+    case "script": {
+      // Whether the module actually exports `image()` is asked when it is
+      // called, and reported in a sentence; see `scripts/image.ts`.
+      if (!connection.script?.trim()) throw new ConnectionError(noScript(connection.name));
+      return new ScriptImageModel({
+        name: connection.name,
+        script: connection.script,
+        baseUrl: connection.baseUrl,
+        apiKey,
+        modelId: model,
+      });
     }
 
     default: {

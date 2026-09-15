@@ -20,12 +20,15 @@ export function SettingsPanel({
   onTheme,
   connections,
   onChanged,
+  onCustom,
 }: {
   theme: Theme;
   onTheme: (theme: Theme) => void;
   connections: ConnectionView[];
   /** The berth reads the default, so a change here has to reach the shell. */
   onChanged: () => void;
+  /** Opens the custom-engine editor under Connections. */
+  onCustom?: () => void;
 }) {
   const [checks, setChecks] = useState<Check[]>([]);
   const [home, setHome] = useState("");
@@ -63,7 +66,7 @@ export function SettingsPanel({
         </div>
       </section>
 
-      <WorkspaceDefaults connections={connections} onChanged={onChanged} />
+      <WorkspaceDefaults connections={connections} onChanged={onChanged} onCustom={onCustom} />
 
       <HandoffPanel />
 

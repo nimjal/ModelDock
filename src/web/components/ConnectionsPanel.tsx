@@ -13,36 +13,55 @@
  * Each connection says which source its key came from, because when a saved key
  * and an exported one disagree, that is the only thing worth knowing.
  *
- * Two ways in, on purpose. The guided screen covers a long list of services
+ * Three ways in, on purpose. The guided screen covers a long list of services
  * with their URLs and key pages filled in and is where almost everyone should
- * start; the form below it describes an endpoint by hand, for the case a
- * catalogue cannot anticipate.
+ * start; the form describes a vendor or OpenAI-shaped endpoint by hand; and a
+ * custom script covers what neither can — any API at all, starting from a
+ * template of one ModelDock already speaks. Every built-in connection can also
+ * be copied into a script, for the case of "this, but sending one thing more".
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
-import { api, type ConnectionView, type KeyStatus, type KindSpec } from "../lib/api";
+import {
+  api,
+  type ConnectionView,
+  type KeyStatus,
+  type KindSpec,
+  type ScriptTemplate,
+} from "../lib/api";
 import { ModelPicker } from "./ModelPicker";
+import { ScriptEditor, type ScriptStart } from "./ScriptEditor";
 
 export function ConnectionsPanel({
   onChanged,
   onSetUp,
+  startScript,
 }: {
   onChanged?: () => void;
   /** Opens the guided provider list. */
   onSetUp?: () => void;
+  /** Open with a new custom engine under way — how the berth and Settings arrive here. */
+  startScript?: boolean;
 }) {
   const [connections, setConnections] = useState<ConnectionView[]>([]);
   const [kinds, setKinds] = useState<KindSpec[]>([]);
+  const [templates, setTemplates] = useState<ScriptTemplate[]>([]);
   const [keys, setKeys] = useState<KeyStatus[]>([]);
   const [keysPath, setKeysPath] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+  /** The custom-engine editor at the top, and what it opened with. `key` remounts it. */
+  const [scripting, setScripting] = useState<(ScriptStart & { key: number }) | null>(
+    startScript ? { key: 0 } : null,
+  );
   const [failure, setFailure] = useState<string | null>(null);
+  const editor = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
     const [data, keyData] = await Promise.all([api.connections(), api.keys()]);
     setConnections(data.connections);
     setKinds(data.kinds);
+    setTemplates(data.templates);
     setKeys(keyData.keys);
     setKeysPath(keyData.path);
   }, []);
@@ -50,6 +69,21 @@ export function ConnectionsPanel({
   useEffect(() => {
     void load();
   }, [load]);
+
+  // "Customise it as a script" is pressed on a row further down, and the editor
+  // it opens is at the top — so the page goes to it rather than leaving it
+  // somewhere above the fold.
+  const hasTemplates = templates.length > 0;
+  useEffect(() => {
+    if (scripting && hasTemplates) {
+      editor.current?.scrollIntoView({ block: "start", behavior: "smooth" });
+    }
+  }, [scripting?.key, hasTemplates]);
+
+  const openScript = (start: ScriptStart = {}) => {
+    setAdding(false);
+    setScripting({ ...start, key: Date.now() });
+  };
 
   const drop = async (id: string) => {
     await api.deleteConnection(id);
@@ -59,8 +93,8 @@ export function ConnectionsPanel({
 
   return (
     <div className="mx-auto w-full max-w-3xl px-5 py-8">
-      <header className="mb-6 flex items-baseline justify-between gap-4">
-        <div>
+      <header className="mb-6 flex flex-wrap items-baseline justify-between gap-4">
+        <div className="min-w-0 flex-1">
           <h1 className="text-[1.25rem] font-semibold tracking-tight">Connections</h1>
           <p className="mt-1 text-[0.8125rem]" style={{ color: "var(--ink-2)" }}>
             The database stores the name of the variable holding your key, never the key itself.
@@ -85,7 +119,18 @@ export function ConnectionsPanel({
           )}
           <button
             type="button"
-            onClick={() => setAdding((value) => !value)}
+            onClick={() => (scripting ? setScripting(null) : openScript())}
+            className="rounded-[var(--radius-sm)] border px-2.5 py-1 text-[0.75rem] transition-colors hover:bg-[var(--wash)]"
+            style={{ borderColor: "var(--line)" }}
+          >
+            {scripting ? "Close script" : "Custom script"}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setScripting(null);
+              setAdding((value) => !value);
+            }}
             className="rounded-[var(--radius-sm)] px-2.5 py-1 text-[0.75rem] transition-colors hover:bg-[var(--wash)]"
             style={{ color: "var(--ink-2)" }}
           >
@@ -94,9 +139,26 @@ export function ConnectionsPanel({
         </div>
       </header>
 
+      {scripting && hasTemplates && (
+        <div ref={editor} className="mb-6 scroll-mt-4">
+          <ScriptEditor
+            key={scripting.key}
+            templates={templates}
+            start={scripting}
+            onCancel={() => setScripting(null)}
+            onSaved={async () => {
+              setScripting(null);
+              await load();
+              onChanged?.();
+            }}
+          />
+        </div>
+      )}
+
       {adding && (
         <ConnectionForm
-          kinds={kinds}
+          // A script is described by its own editor, not by these fields.
+          kinds={kinds.filter((item) => item.kind !== "script")}
           onCancel={() => setAdding(false)}
           onSaved={async () => {
             setAdding(false);
@@ -118,11 +180,13 @@ export function ConnectionsPanel({
           <ConnectionRow
             key={item.id}
             item={item}
+            templates={templates}
             keyStatus={keys.find((key) => key.name === item.apiKeyEnv) ?? null}
             onChanged={async () => {
               await load();
               onChanged?.();
             }}
+            onCustomise={openScript}
             onRemove={() => void drop(item.id)}
           />
         ))}
@@ -133,13 +197,17 @@ export function ConnectionsPanel({
 
 function ConnectionRow({
   item,
+  templates,
   keyStatus,
   onChanged,
+  onCustomise,
   onRemove,
 }: {
   item: ConnectionView;
+  templates: ScriptTemplate[];
   keyStatus: KeyStatus | null;
   onChanged: () => void | Promise<void>;
+  onCustomise: (start: ScriptStart) => void;
   onRemove: () => void;
 }) {
   const [editing, setEditing] = useState(false);
@@ -162,6 +230,13 @@ function ConnectionRow({
     }
   };
 
+  const scripted = item.kind === "script";
+  // The template that reimplements this row's own kind, so a copy starts from
+  // something that already speaks to the same place.
+  const mirror = scripted
+    ? null
+    : (templates.find((template) => template.kind === item.kind) ?? null);
+
   const source =
     keyStatus?.source === "file"
       ? "saved here"
@@ -182,15 +257,18 @@ function ConnectionRow({
         />
         <div className="min-w-0 flex-1">
           <p className="text-[0.875rem] font-medium">{item.name}</p>
-          <p className="font-mono text-[0.75rem]" style={{ color: "var(--ink-3)" }}>
+          <p className="truncate font-mono text-[0.75rem]" style={{ color: "var(--ink-3)" }}>
+            {scripted ? "script · " : ""}
             {item.model}
             {item.baseUrl ? ` · ${item.baseUrl}` : ""}
           </p>
           <p className="mt-1 text-[0.75rem]" style={{ color: "var(--ink-2)" }}>
             {item.ready
-              ? item.apiKeyEnv
-                ? `Ready — ${item.apiKeyEnv}${source ? `, ${source}` : ""}`
-                : "Ready — no key needed"
+              ? `${
+                  item.apiKeyEnv
+                    ? `Ready — ${item.apiKeyEnv}${source ? `, ${source}` : ""}`
+                    : "Ready — no key needed"
+                }${scripted && !item.capabilities.chat ? " · draws only" : ""}`
               : item.problem}
           </p>
         </div>
@@ -201,7 +279,7 @@ function ConnectionRow({
             className="text-[0.6875rem] transition-colors hover:text-[var(--ink)]"
             style={{ color: "var(--ink-3)" }}
           >
-            {editing ? "Done" : item.ready ? "Change" : "Set up"}
+            {editing ? "Done" : scripted ? "Edit script" : item.ready ? "Change" : "Set up"}
           </button>
           <button
             type="button"
@@ -214,7 +292,30 @@ function ConnectionRow({
         </div>
       </div>
 
-      {editing && (
+      {editing && scripted && templates.length > 0 && (
+        <div className="mt-3 pl-5">
+          <ScriptEditor
+            templates={templates}
+            connectionId={item.id}
+            start={{
+              initial: {
+                name: item.name,
+                baseUrl: item.baseUrl ?? "",
+                apiKeyEnv: item.apiKeyEnv ?? "",
+                model: item.model,
+                script: item.script ?? "",
+              },
+            }}
+            onCancel={() => setEditing(false)}
+            onSaved={async () => {
+              setEditing(false);
+              await onChanged();
+            }}
+          />
+        </div>
+      )}
+
+      {editing && !scripted && (
         <div className="mt-3 pl-5">
           {item.apiKeyEnv && (
             <div className="mb-3">
@@ -292,6 +393,30 @@ function ConnectionRow({
           {failure && (
             <p className="mt-2 text-[0.75rem]" style={{ color: "var(--danger)" }}>
               {failure}
+            </p>
+          )}
+
+          {mirror && (
+            <p className="mt-3 text-[0.6875rem]" style={{ color: "var(--ink-3)" }}>
+              Need it to send something this connection does not?{" "}
+              <button
+                type="button"
+                onClick={() =>
+                  onCustomise({
+                    templateId: mirror.id,
+                    initial: {
+                      name: `${item.name} script`,
+                      baseUrl: item.baseUrl ?? "",
+                      apiKeyEnv: item.apiKeyEnv ?? "",
+                      model: item.model,
+                    },
+                  })
+                }
+                className="underline decoration-dotted underline-offset-2 transition-colors hover:text-[var(--ink)]"
+              >
+                Customise it as a script
+              </button>{" "}
+              — a new connection with these settings, starting from the {mirror.label} template.
             </p>
           )}
         </div>

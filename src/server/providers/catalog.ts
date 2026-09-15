@@ -8,7 +8,13 @@
  * gateway dependency: a proxy is just a base URL.
  */
 
-export type ConnectionKind = "anthropic" | "openai" | "google" | "openai_compatible" | "ollama";
+export type ConnectionKind =
+  | "anthropic"
+  | "openai"
+  | "google"
+  | "openai_compatible"
+  | "ollama"
+  | "script";
 
 export interface KindSpec {
   kind: ConnectionKind;
@@ -18,7 +24,20 @@ export interface KindSpec {
   /** Fixed for first-party providers; user-supplied for the rest. */
   defaultBaseUrl: string | null;
   baseUrlEditable: boolean;
+  /**
+   * Whether a connection is unusable without one. Not the same question as
+   * editable: a script may hard-code where it calls, so its base URL is offered
+   * and never demanded.
+   */
+  baseUrlRequired: boolean;
   requiresApiKey: boolean;
+  /**
+   * Whether *naming* a key variable makes it required. True only for scripts,
+   * where naming one is the only way a script says it uses a key at all — so an
+   * unset variable reads as "not set up yet" rather than as a 401 from inside
+   * the script halfway through a turn.
+   */
+  namedKeyRequired: boolean;
   suggestedModels: string[];
   /**
    * The one saturated colour this kind is allowed to paint, and only in the
@@ -36,7 +55,9 @@ export const KINDS: Record<ConnectionKind, KindSpec> = {
     defaultApiKeyEnv: "ANTHROPIC_API_KEY",
     defaultBaseUrl: null,
     baseUrlEditable: false,
+    baseUrlRequired: false,
     requiresApiKey: true,
+    namedKeyRequired: false,
     suggestedModels: ["claude-sonnet-4-5", "claude-opus-4-1", "claude-haiku-4-5"],
     accent: "#C15F3C",
     hint: "Claude models, direct from Anthropic.",
@@ -47,7 +68,9 @@ export const KINDS: Record<ConnectionKind, KindSpec> = {
     defaultApiKeyEnv: "OPENAI_API_KEY",
     defaultBaseUrl: null,
     baseUrlEditable: false,
+    baseUrlRequired: false,
     requiresApiKey: true,
+    namedKeyRequired: false,
     suggestedModels: ["gpt-4.1", "gpt-4.1-mini", "o4-mini"],
     accent: "#10A37F",
     hint: "GPT models, direct from OpenAI.",
@@ -58,7 +81,9 @@ export const KINDS: Record<ConnectionKind, KindSpec> = {
     defaultApiKeyEnv: "GOOGLE_GENERATIVE_AI_API_KEY",
     defaultBaseUrl: null,
     baseUrlEditable: false,
+    baseUrlRequired: false,
     requiresApiKey: true,
+    namedKeyRequired: false,
     suggestedModels: ["gemini-2.5-pro", "gemini-2.5-flash"],
     accent: "#4285F4",
     hint: "Gemini models, direct from Google.",
@@ -69,7 +94,9 @@ export const KINDS: Record<ConnectionKind, KindSpec> = {
     defaultApiKeyEnv: null,
     defaultBaseUrl: "http://localhost:11434/v1",
     baseUrlEditable: true,
+    baseUrlRequired: true,
     requiresApiKey: false,
+    namedKeyRequired: false,
     suggestedModels: ["llama3.2", "qwen2.5-coder", "mistral"],
     accent: "#7C6BF5",
     hint: "Models running on this machine. No key needed.",
@@ -80,10 +107,33 @@ export const KINDS: Record<ConnectionKind, KindSpec> = {
     defaultApiKeyEnv: "OPENAI_COMPATIBLE_API_KEY",
     defaultBaseUrl: "",
     baseUrlEditable: true,
+    baseUrlRequired: true,
     requiresApiKey: false,
+    namedKeyRequired: false,
     suggestedModels: [],
     accent: "#8A8F8C",
     hint: "Any endpoint speaking the OpenAI API: OpenRouter, LiteLLM, vLLM, LM Studio, Groq, Together, your own server.",
+  },
+  /**
+   * A custom engine: a JavaScript module rather than a wire protocol, for every
+   * API the kinds above do not speak. See `scripts/runtime.ts`.
+   *
+   * It takes the neutral accent for the reason an unbranded endpoint does. A
+   * script is someone's own, and even one started from the Claude template is no
+   * longer Anthropic's to colour.
+   */
+  script: {
+    kind: "script",
+    label: "Custom script",
+    defaultApiKeyEnv: null,
+    defaultBaseUrl: null,
+    baseUrlEditable: true,
+    baseUrlRequired: false,
+    requiresApiKey: false,
+    namedKeyRequired: true,
+    suggestedModels: [],
+    accent: "#8A8F8C",
+    hint: "Any API, in a few lines of JavaScript. Start from a template and change what it sends.",
   },
 };
 
@@ -93,6 +143,7 @@ export const KIND_LIST: KindSpec[] = [
   KINDS.google,
   KINDS.ollama,
   KINDS.openai_compatible,
+  KINDS.script,
 ];
 
 export function accentFor(kind: string): string {

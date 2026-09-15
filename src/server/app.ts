@@ -25,6 +25,7 @@ import { memoryRoutes } from "./routes/memory.js";
 import { skillRoutes } from "./routes/skills.js";
 import { syncRoutes } from "./routes/sync.js";
 import { projectRoutes } from "./routes/projects.js";
+import { scriptRoutes } from "./routes/scripts.js";
 import { threadRoutes } from "./routes/threads.js";
 import { workspaceRoutes } from "./routes/workspace.js";
 
@@ -73,6 +74,9 @@ export function createApp({ port, devOrigins = [] }: AppOptions): Hono {
 
   app.route("/api", healthRoutes);
   app.route("/api", connectionRoutes);
+  // Runs the script it is sent, which is safe for the same two reasons as
+  // everything else here: loopback only, and never from another site's page.
+  app.route("/api", scriptRoutes);
   // Loopback-only and Origin-checked like everything else here, which is what
   // lets this one be the single route allowed to accept a credential.
   app.route("/api", keyRoutes);

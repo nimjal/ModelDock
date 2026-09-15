@@ -36,7 +36,16 @@ const synced = <T extends SQLiteTable>(
 ): Synced<T> => ({ table, skip });
 
 export const SYNCED = [
-  synced(connections, []),
+  /**
+   * `script` is code that runs inside this process, with this machine's keys
+   * and files in reach, and it is refused in both directions — `syncedColumns`
+   * filters what is applied as well as what is sent. Pairing is trust in
+   * another device's *data*; a script arriving by sync would be that device
+   * running code here. The row still travels, because threads and the workspace
+   * point at it, and on the far side it reports that it has no script until
+   * someone on that machine deliberately adds one.
+   */
+  synced(connections, ["script"]),
 
   /** `directory` is a path on the machine that set it. */
   synced(projects, ["directory"]),

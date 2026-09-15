@@ -20,6 +20,7 @@ import { connections, workspace, type Connection, type Workspace } from "./db/sc
 import { patch, put } from "./db/write.js";
 import { imageKindFor } from "./images/catalog.js";
 import { checkConnection } from "./providers/registry.js";
+import { inspectScript } from "./scripts/runtime.js";
 
 /**
  * The one row, on every machine.
@@ -145,12 +146,22 @@ export async function imageEngine(db: Db): Promise<ImageEngine | null> {
   const spec = imageKindFor(connection.kind);
   if (!spec) return null;
 
-  const model = row.imageModel?.trim() || spec.defaultModel;
-  if (!model) return null;
-
   // The same readiness rule every other surface uses, so a missing key reads
   // as "not set up yet" here too rather than as a failed generation later.
   if (!checkConnection(connection).ok) return null;
+
+  let fallback = spec.defaultModel;
+  if (connection.kind === "script") {
+    // Whether a script draws is a fact about the module rather than the kind,
+    // so the module is asked. One that does not load, or has no `image()`, is
+    // treated like a kind that cannot draw: the tool is simply not offered.
+    const inspection = await inspectScript(connection);
+    if (inspection.problem || !inspection.image) return null;
+    fallback = inspection.defaultImageModel ?? connection.model;
+  }
+
+  const model = row.imageModel?.trim() || fallback;
+  if (!model) return null;
 
   return { connection, model };
 }

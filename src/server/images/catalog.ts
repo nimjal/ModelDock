@@ -81,6 +81,19 @@ export const IMAGE_KINDS: Partial<Record<ConnectionKind, ImageKindSpec>> = {
     sizes: ["512x512", "1024x1024", "1024x1536"],
     hint: "Any endpoint with /v1/images/generations — LocalAI, ComfyUI behind a shim, a proxy, your own server.",
   },
+  /**
+   * The one entry that means "might". A kind cannot know whether a given
+   * script exports `image()`, so `workspace.ts` and the workspace route ask the
+   * module before offering it, and a script that does not draw is left out the
+   * way Anthropic is.
+   */
+  script: {
+    kind: "script",
+    defaultModel: "",
+    suggestedModels: [],
+    sizes: ["1024x1024", "1536x1024", "1024x1536"],
+    hint: "Whatever the script's image() does with the prompt, the model and the size.",
+  },
 };
 
 export const IMAGE_KIND_LIST: ImageKindSpec[] = Object.values(IMAGE_KINDS);

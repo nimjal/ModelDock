@@ -37,6 +37,7 @@ import type { Db } from "../db/index.js";
 import { connections, type Connection } from "../db/schema.js";
 import { listModels } from "../providers/models.js";
 import { checkConnection, resolveApiKey } from "../providers/registry.js";
+import { inspectScript } from "../scripts/runtime.js";
 
 /** Lower-case, no slashes, no spaces. Safe on either side of the boundary. */
 export function slugFor(name: string): string {
@@ -139,12 +140,24 @@ export async function gatewayCatalog(db: Db): Promise<GatewayCatalog> {
       const status = checkConnection(row);
       if (!status.ok) return { row, listed: null, problem: status.problem! };
 
+      if (row.kind === "script") {
+        const inspection = await inspectScript(row);
+        if (inspection.problem) return { row, listed: null, problem: inspection.problem };
+        // A script that only draws has nothing to offer a client that wants a
+        // conversation, so it is not exported at all.
+        if (!inspection.chat) return null;
+        // One with no list of its own still offers the model on its row, below.
+        // That is a script that did not say, not a problem worth reporting.
+        if (!inspection.models) return { row, listed: [], problem: null };
+      }
+
       try {
         const listed = await listModels({
           kind: row.kind,
           baseUrl: row.baseUrl,
           apiKey: resolveApiKey(row),
           label: row.name,
+          script: row.script,
         });
         return { row, listed, problem: null };
       } catch (error) {
@@ -153,7 +166,9 @@ export async function gatewayCatalog(db: Db): Promise<GatewayCatalog> {
     }),
   );
 
-  for (const { row, listed, problem } of results) {
+  for (const result of results) {
+    if (!result) continue;
+    const { row, listed, problem } = result;
     const slug = slugs.get(row.id)!;
 
     const add = (model: string, label: string | null) => {
