@@ -412,10 +412,15 @@ codeRoutes.post("/code", async (c) => {
 
         const parts = [...(responseMessage.parts as unknown[])];
 
-        // `isAborted` only covers the SDK's own cancellation; a browser that
-        // simply disconnects trips our controller instead. Checking both is
-        // what makes the Stop button honest about what happened.
-        const stopped = isAborted || controller.signal.aborted;
+        // `isAborted` only covers the SDK's own cancellation. `controller`
+        // covers a process shutdown, which aborts it directly with no request
+        // in play. And the request signal itself is read here too, rather
+        // than trusted to have already reached `controller` — the SDK calls
+        // `onEnd` as soon as the client cancels the stream, which races our
+        // own `abort` listener on `c.req.raw.signal`; `.aborted` is true the
+        // instant the signal fires, before any listener runs, so it is the
+        // one check here that can't lose that race.
+        const stopped = isAborted || controller.signal.aborted || c.req.raw.signal.aborted;
 
         // Unlike chat, an aborted run is kept — files may already have changed,
         // so the record of how far it got has to survive the stop.

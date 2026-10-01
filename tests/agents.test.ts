@@ -372,12 +372,21 @@ describe("stopping a run", () => {
     controller.abort();
     await reader.cancel().catch(() => {});
 
-    // Give the adapter a moment to tear the child down and run `onEnd`.
-    await new Promise((resolve) => setTimeout(resolve, 1500));
+    // Give the adapter time to tear the child down and run `onEnd`. Polling
+    // rather than a single fixed sleep keeps this from flaking on a
+    // slower CI runner where signal delivery and process teardown take
+    // longer than they do locally — but the ceiling stays well under the
+    // fixture's 5s natural completion, so a real regression still fails
+    // instead of quietly passing on the un-aborted transcript.
+    const deadline = Date.now() + 4000;
+    let rows = await assistantRows(threadId);
+    while (rows.length === 0 && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      rows = await assistantRows(threadId);
+    }
 
     // Unlike chat, an aborted coding run is kept: files may already have
     // changed, so the record of what happened has to survive the stop.
-    const rows = await assistantRows(threadId);
     expect(rows).toHaveLength(1);
     expect(JSON.stringify(rows[0]!.parts)).toContain("Stopped.");
 
